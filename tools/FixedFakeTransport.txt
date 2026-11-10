@@ -1,0 +1,52 @@
+class FakeTransport implements BluetoothConnectionTransport {
+  FakeTransport() {
+    _enabledController = StreamController<bool>.broadcast();
+    _adapterController = StreamController<BtcAdapterState>.broadcast();
+  }
+
+  @override
+  Future<bool> isEnabled() => Future.value(_enabled);
+
+  @override
+  Future<BtcPermissionStatus> checkPermissions() async => BtcPermissionStatus.granted;
+
+  @override
+  Future<BluetoothLink> connect({
+    required String address,
+    String uuid = BtcUuid.spp,
+    bool secure = true,
+    Duration? timeout,
+  }) async {
+    if (connectThrows != null) throw connectThrows!;
+    _link = FakeBluetoothLink();
+    return _link!;
+  }
+
+  late StreamController<bool> _enabledController;
+  late StreamController<BtcAdapterState> _adapterController;
+
+  FakeBluetoothLink? _link;
+
+  bool _enabled = true;
+
+  /// Whether Bluetooth is enabled. Set to false to simulate adapter being off.
+  bool get enabled => _enabled;
+
+  set enabled(bool value) {
+    _enabled = value;
+    _enabledController.add(value);
+  }
+
+  /// The adapter state emitted by the stream. Defaults to on (powered on).
+  BtcAdapterState get adapterState => BtcAdapterState.on;
+
+  set adapterState(BtcAdapterState value) {
+    _adapterController.add(value);
+  }
+
+  /// Exception to throw from [connect].
+  Object? connectThrows;
+
+  /// The link returned by the most recent [connect].
+  FakeBluetoothLink? get link => _link;
+}

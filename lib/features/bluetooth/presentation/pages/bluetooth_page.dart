@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../services/bluetooth/bluetooth_connection_service.dart';
 import '../../../../services/bluetooth/bluetooth_permission_service.dart';
 import '../../../../shared/widgets/app_widgets.dart';
 import '../../domain/entities/discovered_device.dart';
+import '../controllers/bluetooth_connection_provider.dart';
 import '../controllers/bluetooth_discovery_providers.dart';
 import '../controllers/bluetooth_permission_providers.dart';
 
@@ -138,8 +140,6 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
               const SizedBox(height: 12),
               _row('Bluetooth Status', _bluetoothStatusText(readiness)),
               _row('Permission', _permissionText(readiness.permissionStatus)),
-              _row('Selected Device', 'None'),
-              _row('Connection Status', 'Disconnected'),
               if (readiness.locationServiceRequired)
                 _row(
                   'Location Services',
@@ -163,6 +163,10 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        const _ConnectionStatusCard(),
+        const SizedBox(height: 16),
+        const _DebugMonitor(),
         const SizedBox(height: 16),
         Expanded(
           child: _deviceLists(discovery, readiness),
@@ -199,87 +203,28 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
             subtitle: '${paired.length} bonded device(s) available on this phone',
           ),
           const SizedBox(height: 8),
-          ...paired.map((d) => _deviceTile(d, paired: true)),
+          ...paired.map((d) => _DeviceTile(device: d, paired: true)),
           const SizedBox(height: 16),
         ],
-        SectionHeader(
-          title: 'Discovered Devices',
-          subtitle: scanning
-              ? 'Scanning nearby Bluetooth Classic devices...'
-              : discovered.isEmpty
-                  ? 'No new nearby devices found'
-                  : '${discovered.length} device(s) found nearby',
-        ),
-        const SizedBox(height: 8),
-        if (scanning && discovered.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Center(child: CircularProgressIndicator()),
+        if (discovered.isNotEmpty) ...[
+          SectionHeader(
+            title: 'Discovered Devices',
+            subtitle: scanning
+                ? 'Scanning nearby Bluetooth Classic devices...'
+                : '${discovered.length} device(s) found nearby',
           ),
-        if (!scanning && discovered.isEmpty)
+          const SizedBox(height: 8),
+          ...discovered.map((d) => _DeviceTile(device: d, paired: false)),
+          const SizedBox(height: 16),
+        ],
+        if (discovered.isEmpty && !scanning)
           const AppCard(
             child: Text(
               'No new discoverable devices detected. HC-05 must be powered and discoverable if not already paired.',
               style: AppTextStyles.caption,
             ),
           ),
-        ...discovered.map((d) => _deviceTile(d, paired: false)),
       ],
-    );
-  }
-
-  Widget _deviceTile(DiscoveredDevice device, {required bool paired}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: AppCard(
-        child: Row(
-          children: [
-            Icon(
-              paired ? Icons.bluetooth_connected : Icons.bluetooth,
-              color: paired ? AppColors.success : AppColors.primary,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(device.name, style: AppTextStyles.body),
-                  const SizedBox(height: 4),
-                  Text(device.address, style: AppTextStyles.caption),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      _chip(paired ? 'Paired' : 'Discovered', paired ? AppColors.success : AppColors.secondary),
-                      _chip(paired ? 'Source: Paired' : 'Source: Discovered', AppColors.textSecondary),
-                      if (device.rssi != null)
-                        _chip('RSSI ${device.rssi} dBm', AppColors.textSecondary),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: null, // Connection implemented in Step 4
-              child: const Text('Connect'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _chip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -436,4 +381,414 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
       ),
     );
   }
+}
+
+class _DeviceTile extends ConsumerWidget {
+  final DiscoveredDevice device;
+  final bool paired;
+
+  const _DeviceTile({required this.device, required this.paired});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final conn = ref.watch(bluetoothConnectionProvider);
+    final controller = ref.read(bluetoothConnectionProvider.notifier);
+
+    final busy = conn.status == BluetoothServiceStatus.connecting ||
+        conn.status == BluetoothServiceStatus.disconnecting;
+    final isThisConnected =
+        conn.status == BluetoothServiceStatus.connected && conn.deviceAddress == device.address;
+    final otherConnected =
+        conn.status == BluetoothServiceStatus.connected && !isThisConnected;
+
+    Widget connectButton;
+    if (isThisConnected) {
+      connectButton = ElevatedButton(
+        onPressed: null,
+        style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+        child: const Text('Connected'),
+      );
+    } else if (busy) {
+      connectButton = OutlinedButton(
+        onPressed: null,
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 8),
+            Text('Connecting...'),
+          ],
+        ),
+      );
+    } else {
+      connectButton = OutlinedButton(
+        onPressed: otherConnected
+            ? null
+            : () => controller.connect(address: device.address, deviceName: device.name),
+        child: const Text('Connect'),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: AppCard(
+        child: Row(
+          children: [
+            Icon(
+              paired ? Icons.bluetooth_connected : Icons.bluetooth,
+              color: paired ? AppColors.success : AppColors.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(device.name, style: AppTextStyles.body),
+                  const SizedBox(height: 4),
+                  Text(device.address, style: AppTextStyles.caption),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      _chip(paired ? 'Paired' : 'Discovered', paired ? AppColors.success : AppColors.secondary),
+                      _chip(paired ? 'Source: Paired' : 'Source: Discovered', AppColors.textSecondary),
+                      if (device.rssi != null)
+                        _chip('RSSI ${device.rssi} dBm', AppColors.textSecondary),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            connectButton,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+class _ConnectionStatusCard extends ConsumerWidget {
+  const _ConnectionStatusCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final conn = ref.watch(bluetoothConnectionProvider);
+    final controller = ref.read(bluetoothConnectionProvider.notifier);
+    final v = _connVisual(conn.status);
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: SectionHeader(title: 'Connection Status')),
+              StatusPill(label: v.label, color: v.color, icon: v.icon),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ..._statusBody(conn, controller),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _statusBody(
+    BluetoothConnectionState conn,
+    BluetoothConnectionController controller,
+  ) {
+    switch (conn.status) {
+      case BluetoothServiceStatus.disconnected:
+        return [
+          _infoRow('Selected Device', conn.deviceName ?? 'None'),
+          const SizedBox(height: 8),
+          const Text(
+            'Select a paired device and press Connect.',
+            style: AppTextStyles.caption,
+          ),
+        ];
+      case BluetoothServiceStatus.connecting:
+        return [
+          Row(
+            children: [
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('در حال اتصال به دستگاه...', style: AppTextStyles.body)),
+            ],
+          ),
+          if (conn.deviceName != null) ...[
+            const SizedBox(height: 8),
+            _infoRow('Device', conn.deviceName!),
+          ],
+        ];
+      case BluetoothServiceStatus.connected:
+        return [
+          _infoRow('Device', conn.deviceName ?? '—'),
+          _infoRow('MAC Address', conn.deviceAddress ?? '—'),
+          if (conn.connectedAt != null)
+            _infoRow('Connected At', _formatTime(conn.connectedAt!)),
+          if (conn.lastDataReceivedAt != null)
+            _infoRow('Last Data At', _formatTime(conn.lastDataReceivedAt!)),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () => controller.disconnect(),
+              icon: const Icon(Icons.link_off),
+              label: const Text('Disconnect'),
+            ),
+          ),
+        ];
+      case BluetoothServiceStatus.disconnecting:
+        return [
+          const Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('در حال قطع اتصال...', style: AppTextStyles.body),
+            ],
+          ),
+        ];
+      case BluetoothServiceStatus.error:
+        return [
+          if (conn.deviceName != null) _infoRow('Device', conn.deviceName!),
+          const SizedBox(height: 6),
+          Text(
+            conn.errorMessage ?? 'Connection failed.',
+            style: const TextStyle(color: AppColors.error, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Press Connect again on the device to retry.',
+            style: AppTextStyles.caption,
+          ),
+        ];
+    }
+  }
+}
+
+class _DebugMonitor extends ConsumerWidget {
+  const _DebugMonitor();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final conn = ref.watch(bluetoothConnectionProvider);
+    if (conn.status != BluetoothServiceStatus.connected) {
+      return const SizedBox.shrink();
+    }
+    final controller = ref.read(bluetoothConnectionProvider.notifier);
+    final events = conn.recentEvents.reversed.toList();
+
+    Widget empty = const Padding(
+      padding: EdgeInsets.symmetric(vertical: 10),
+      child: Text('هنوز داده‌ای از دستگاه دریافت نشده است.', style: AppTextStyles.caption),
+    );
+
+    Widget list = Container(
+      constraints: const BoxConstraints(maxHeight: 240),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF2A3442)),
+      ),
+      child: ListView.separated(
+        padding: const EdgeInsets.all(10),
+        itemCount: events.length,
+        separatorBuilder: (_, _) => Divider(height: 1, color: const Color(0xFF2A3442)),
+        itemBuilder: (context, index) {
+          final ev = events[index];
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(_formatTime(ev.receivedAt), style: AppTextStyles.caption),
+                    const Spacer(),
+                    Text('${ev.byteCount} B', style: AppTextStyles.caption),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                SelectableText(
+                  ev.hex,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SelectableText(
+                  _bytesAsText(ev.data),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: SectionHeader(
+                  title: 'Bluetooth Debug Monitor',
+                  subtitle: 'Raw hardware data (no parsing)',
+                ),
+              ),
+              IconButton(
+                tooltip: 'Clear debug',
+                onPressed: () => controller.clearDebug(),
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _infoRow('Received Events', '${conn.dataEventCount}'),
+          _infoRow('Total Bytes', '${conn.totalBytesReceived}'),
+          _infoRow(
+            'Last Received',
+            conn.lastDataReceivedAt != null ? _formatTime(conn.lastDataReceivedAt!) : '—',
+          ),
+          if (conn.lastRawData != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Last Raw Data — Hex', style: AppTextStyles.caption),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    _hexOf(conn.lastRawData!),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Text', style: AppTextStyles.caption),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    _bytesAsText(conn.lastRawData!),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Recent Events', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+              ),
+              const Text('newest first', style: AppTextStyles.caption),
+            ],
+          ),
+          const SizedBox(height: 6),
+          events.isEmpty ? empty : list,
+        ],
+      ),
+    );
+  }
+}
+
+({String label, Color color, IconData icon}) _connVisual(BluetoothServiceStatus s) {
+  switch (s) {
+    case BluetoothServiceStatus.disconnected:
+      return (label: 'Disconnected', color: AppColors.textSecondary, icon: Icons.link_off);
+    case BluetoothServiceStatus.connecting:
+      return (label: 'Connecting', color: AppColors.warning, icon: Icons.link);
+    case BluetoothServiceStatus.connected:
+      return (label: 'Connected', color: AppColors.success, icon: Icons.bluetooth_connected);
+    case BluetoothServiceStatus.disconnecting:
+      return (label: 'Disconnecting', color: AppColors.warning, icon: Icons.hourglass_top);
+    case BluetoothServiceStatus.error:
+      return (label: 'Error', color: AppColors.error, icon: Icons.error_outline);
+  }
+}
+
+Widget _infoRow(String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Expanded(child: Text(label, style: AppTextStyles.caption)),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+String _formatTime(DateTime t) {
+  final l = t.toLocal();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}:${two(l.second)}';
+}
+
+String _hexOf(List<int> data) {
+  final sb = StringBuffer();
+  for (final b in data) {
+    if (sb.isNotEmpty) sb.write(' ');
+    sb.write(b.toRadixString(16).padLeft(2, '0').toUpperCase());
+  }
+  return sb.toString();
+}
+
+String _bytesAsText(List<int> data) {
+  final sb = StringBuffer();
+  for (final b in data) {
+    if (b >= 0x20 && b <= 0x7E) {
+      sb.writeCharCode(b);
+    } else {
+      sb.write('•');
+    }
+  }
+  return sb.toString();
 }
