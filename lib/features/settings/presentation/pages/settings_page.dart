@@ -1,125 +1,160 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/l10n/strings.dart';
+import '../../../../core/settings/settings_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_widgets.dart';
 
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
-  bool _autoConnect = false;
-  String _theme = 'Dark';
-  String _language = 'English';
-  String _heatmapMode = 'Cell Heatmap';
+class _SettingsPageState extends ConsumerState<SettingsPage> {
+  String _heatmapMode = 'cell';
   int _defaultRows = AppConstants.defaultRows;
   int _defaultCols = AppConstants.defaultColumns;
 
   @override
   Widget build(BuildContext context) {
+    final settings = ref.watch(settingsProvider);
+    final controller = ref.read(settingsProvider.notifier);
+    final locale = settings.locale;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(Strings.tr(locale, 'settings'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const SectionHeader(title: 'General', subtitle: 'Appearance and app information'),
+            SectionHeader(
+              title: Strings.tr(locale, 'general'),
+              subtitle: Strings.tr(locale, 'appearance'),
+            ),
             const SizedBox(height: 10),
             AppCard(
               child: Column(
                 children: [
                   _dropdownTile(
                     icon: Icons.dark_mode_outlined,
-                    label: 'Theme',
-                    value: _theme,
-                    items: const ['Dark'],
-                    onChanged: (v) => setState(() => _theme = v ?? _theme),
+                    label: Strings.tr(locale, 'theme'),
+                    value: settings.themeMode == AppThemeMode.light
+                        ? Strings.tr(locale, 'light')
+                        : Strings.tr(locale, 'dark'),
+                    items: [
+                      Strings.tr(locale, 'dark'),
+                      Strings.tr(locale, 'light'),
+                    ],
+                    onChanged: (v) {
+                      controller.setThemeMode(
+                        v == Strings.tr(locale, 'light') ? AppThemeMode.light : AppThemeMode.dark,
+                      );
+                    },
                   ),
                   const Divider(height: 20),
                   _dropdownTile(
                     icon: Icons.language,
-                    label: 'Language',
-                    value: _language,
-                    items: const ['English'],
-                    onChanged: (v) => setState(() => _language = v ?? _language),
+                    label: Strings.tr(locale, 'language'),
+                    value: Strings.tr(locale, 'persian'),
+                    items: [
+                      Strings.tr(locale, 'english'),
+                      Strings.tr(locale, 'persian'),
+                    ],
+                    onChanged: (v) {
+                      controller.setLocale(
+                        v == Strings.tr(locale, 'persian') ? AppLocale.fa : AppLocale.en,
+                      );
+                    },
                   ),
                   const Divider(height: 20),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.info_outline, color: AppColors.primary),
-                    title: const Text('About Application', style: AppTextStyles.body),
-                    subtitle: const Text('Magnetic Field Scanner • Phase 1 UI', style: AppTextStyles.caption),
+                    title: Text(Strings.tr(locale, 'about'), style: AppTextStyles.body),
+                    subtitle: Text(Strings.tr(locale, 'aboutSub'), style: AppTextStyles.caption),
                     onTap: () => showAboutDialog(
                       context: context,
-                      applicationName: 'Magnetic Scanner',
-                      applicationVersion: '1.0.0 (Phase 1)',
-                      applicationLegalese: 'UI foundation for magnetic field scanning.',
+                      applicationName: Strings.tr(locale, 'appName'),
+                      applicationVersion: '1.0.0',
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            const SectionHeader(title: 'Bluetooth', subtitle: 'Connection preferences (UI only)'),
+            SectionHeader(
+              title: Strings.tr(locale, 'bluetoothPrefs'),
+              subtitle: Strings.tr(locale, 'bluetoothPrefsSub'),
+            ),
             const SizedBox(height: 10),
             AppCard(
               child: Column(
                 children: [
-                  const ListTile(
+                  ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.bluetooth_connected, color: AppColors.primary),
-                    title: Text('Last Connected Device', style: AppTextStyles.body),
-                    subtitle: Text('None', style: AppTextStyles.caption),
+                    leading: const Icon(Icons.bluetooth_connected, color: AppColors.primary),
+                    title: Text(Strings.tr(locale, 'lastConnectedDevice'), style: AppTextStyles.body),
+                    subtitle: Text(Strings.tr(locale, 'none'), style: AppTextStyles.caption),
                   ),
                   const Divider(height: 20),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     secondary: const Icon(Icons.sync, color: AppColors.primary),
-                    title: const Text('Auto Connect', style: AppTextStyles.body),
-                    subtitle: const Text('Attempt reconnect on app start (future)', style: AppTextStyles.caption),
-                    value: _autoConnect,
-                    onChanged: (v) => setState(() => _autoConnect = v),
+                    title: Text(Strings.tr(locale, 'autoConnect'), style: AppTextStyles.body),
+                    subtitle: Text(Strings.tr(locale, 'autoConnectSub'), style: AppTextStyles.caption),
+                    value: false,
+                    onChanged: (_) {},
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            const SectionHeader(title: 'Scan Settings', subtitle: 'Defaults and visualization preferences'),
+            SectionHeader(
+              title: Strings.tr(locale, 'scanSettings'),
+              subtitle: Strings.tr(locale, 'scanSettingsSub'),
+            ),
             const SizedBox(height: 10),
             AppCard(
               child: Column(
                 children: [
                   _numberPickerTile(
                     icon: Icons.table_rows_outlined,
-                    label: 'Default Rows',
+                    label: Strings.tr(locale, 'defaultRows'),
                     value: _defaultRows,
                     onChanged: (v) => setState(() => _defaultRows = v),
                   ),
                   const Divider(height: 20),
                   _numberPickerTile(
                     icon: Icons.view_column_outlined,
-                    label: 'Default Columns',
+                    label: Strings.tr(locale, 'defaultColumns'),
                     value: _defaultCols,
                     onChanged: (v) => setState(() => _defaultCols = v),
                   ),
                   const Divider(height: 20),
                   _dropdownTile(
                     icon: Icons.gradient,
-                    label: 'Heatmap Display Mode',
-                    value: _heatmapMode,
-                    items: const ['Cell Heatmap', 'Smooth Heatmap'],
-                    onChanged: (v) => setState(() => _heatmapMode = v ?? _heatmapMode),
+                    label: Strings.tr(locale, 'heatmapDisplayMode'),
+                    value: _heatmapMode == 'cell'
+                        ? Strings.tr(locale, 'cellHeatmap')
+                        : Strings.tr(locale, 'smoothHeatmap'),
+                    items: [
+                      Strings.tr(locale, 'cellHeatmap'),
+                      Strings.tr(locale, 'smoothHeatmap'),
+                    ],
+                    onChanged: (v) => setState(() {
+                      _heatmapMode = v == Strings.tr(locale, 'cellHeatmap') ? 'cell' : 'smooth';
+                    }),
                   ),
                   const SizedBox(height: 8),
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Settings are UI-only in Phase 1 and are not persisted.',
+                      Strings.tr(locale, 'settingsUiOnly'),
                       style: AppTextStyles.caption,
                     ),
                   ),
@@ -147,7 +182,6 @@ class _SettingsPageState extends State<SettingsPage> {
         DropdownButton<String>(
           value: value,
           underline: const SizedBox.shrink(),
-          dropdownColor: AppColors.surface,
           items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: onChanged,
         ),

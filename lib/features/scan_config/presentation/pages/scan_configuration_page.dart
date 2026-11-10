@@ -1,13 +1,16 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/app.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/l10n/strings.dart';
+import '../../../../core/settings/settings_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_widgets.dart';
 
-class ScanConfigurationPage extends StatefulWidget {
+class ScanConfigurationPage extends ConsumerStatefulWidget {
   final int? initialRows;
   final int? initialColumns;
 
@@ -18,10 +21,10 @@ class ScanConfigurationPage extends StatefulWidget {
   });
 
   @override
-  State<ScanConfigurationPage> createState() => _ScanConfigurationPageState();
+  ConsumerState<ScanConfigurationPage> createState() => _ScanConfigurationPageState();
 }
 
-class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
+class _ScanConfigurationPageState extends ConsumerState<ScanConfigurationPage> {
   late final TextEditingController _rowsController;
   late final TextEditingController _columnsController;
   final _formKey = GlobalKey<FormState>();
@@ -55,12 +58,18 @@ class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
   }
 
   String? _validate(String? value, String label) {
-    if (value == null || value.trim().isEmpty) return '$label is required';
+    final locale = ref.read(localeProvider);
+    if (value == null || value.trim().isEmpty) {
+      return '$label ${Strings.tr(locale, 'requireLabel')}';
+    }
     final n = int.tryParse(value);
-    if (n == null) return 'Enter a valid number';
-    if (n <= 0) return '$label must be greater than 0';
+    if (n == null) return Strings.tr(locale, 'validNumber');
+    if (n <= 0) return '$label ${Strings.tr(locale, 'greaterThanZero')}';
     if (n < AppConstants.minGridSize || n > AppConstants.maxGridSize) {
-      return '$label must be between ${AppConstants.minGridSize} and ${AppConstants.maxGridSize}';
+      return Strings.tr(locale, 'betweenRange', {
+        'min': '${AppConstants.minGridSize}',
+        'max': '${AppConstants.maxGridSize}',
+      });
     }
     return null;
   }
@@ -78,6 +87,7 @@ class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
 
   @override
   Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
     final validRows = int.tryParse(_rowsController.text) ?? _rows;
     final validCols = int.tryParse(_columnsController.text) ?? _cols;
     final showPreview = validRows > 0 && validCols > 0 &&
@@ -85,7 +95,7 @@ class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
     final total = (showPreview ? validRows * validCols : 0);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan Configuration')),
+      appBar: AppBar(title: Text(Strings.tr(locale, 'scanConfiguration'))),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -95,10 +105,10 @@ class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const AppCard(
+                AppCard(
                   child: SectionHeader(
-                    title: 'Grid Dimensions',
-                    subtitle: 'Define the scan area size. Limits prevent excessive memory use.',
+                    title: Strings.tr(locale, 'gridDimensions'),
+                    subtitle: Strings.tr(locale, 'gridDimensionsSub'),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -112,11 +122,8 @@ class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
                               controller: _rowsController,
                               keyboardType: TextInputType.number,
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                              decoration: const InputDecoration(
-                                labelText: 'Rows',
-                                hintText: 'e.g. 10',
-                              ),
-                              validator: (v) => _validate(v, 'Rows'),
+                              decoration: InputDecoration(labelText: Strings.tr(locale, 'rows')),
+                              validator: (v) => _validate(v, Strings.tr(locale, 'rows')),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -125,39 +132,39 @@ class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
                               controller: _columnsController,
                               keyboardType: TextInputType.number,
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                              decoration: const InputDecoration(
-                                labelText: 'Columns',
-                                hintText: 'e.g. 10',
-                              ),
-                              validator: (v) => _validate(v, 'Columns'),
+                              decoration: InputDecoration(labelText: Strings.tr(locale, 'columns')),
+                              validator: (v) => _validate(v, Strings.tr(locale, 'columns')),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      _summaryRow('Total Points', total > 0 ? '$total' : '—'),
-                      _summaryRow('Allowed Range', '${AppConstants.minGridSize}–${AppConstants.maxGridSize} per axis'),
+                      _summaryRow(Strings.tr(locale, 'totalPointsLabel'), total > 0 ? '$total' : '—'),
+                      _summaryRow(
+                        Strings.tr(locale, 'allowedRange'),
+                        '${AppConstants.minGridSize}–${AppConstants.maxGridSize}',
+                      ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'Values of 0 or negative numbers are not allowed.',
+                      Text(
+                        Strings.tr(locale, 'nonPositiveHint'),
                         style: AppTextStyles.caption,
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                const SectionHeader(
-                  title: 'Grid Preview',
-                  subtitle: 'Neutral preview of scan cells (no measurement data)',
+                SectionHeader(
+                  title: Strings.tr(locale, 'gridPreview'),
+                  subtitle: Strings.tr(locale, 'gridPreviewSub'),
                 ),
                 const SizedBox(height: 10),
                 AppCard(
                   child: showPreview
                       ? _GridPreview(rows: validRows, columns: validCols)
-                      : const EmptyState(
+                      : EmptyState(
                           icon: Icons.grid_off,
-                          title: 'Invalid dimensions',
-                          message: 'Enter valid rows and columns to see a preview.',
+                          title: Strings.tr(locale, 'invalidDimensions'),
+                          message: Strings.tr(locale, 'invalidDimensionsMsg'),
                         ),
                 ),
                 const SizedBox(height: 20),
@@ -166,7 +173,7 @@ class _ScanConfigurationPageState extends State<ScanConfigurationPage> {
                   child: ElevatedButton.icon(
                     onPressed: _startScanning,
                     icon: const Icon(Icons.radar),
-                    label: const Text('Start Scanning'),
+                    label: Text(Strings.tr(locale, 'startScanning')),
                   ),
                 ),
               ],
@@ -198,7 +205,7 @@ class _GridPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const maxCells = 400; // limit preview rendering cost
+    const maxCells = 400;
     final total = rows * columns;
     final renderAll = total <= maxCells;
     final displayRows = renderAll ? rows : rows.clamp(1, 20);

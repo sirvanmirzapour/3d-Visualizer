@@ -1,5 +1,8 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/strings.dart';
+import '../../core/settings/settings_controller.dart';
 import '../../features/bluetooth/presentation/pages/bluetooth_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/scan_history/presentation/pages/history_page.dart';
@@ -44,11 +47,12 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => ScanDetailPage(
             title: (args['title'] as String?) ?? 'Scan Detail',
-            date: (args['date'] as String?) ?? '-',
+            date: (args['date'] as DateTime?) ?? DateTime.now(),
             rows: (args['rows'] as int?) ?? 0,
             columns: (args['columns'] as int?) ?? 0,
             points: (args['points'] as int?) ?? 0,
             status: (args['status'] as String?) ?? 'Incomplete',
+            measurements: (args['measurements'] as List?)?.cast<num>(),
           ),
         );
       default:
@@ -57,14 +61,14 @@ class AppRouter {
   }
 }
 
-class MainNavigationShell extends StatefulWidget {
+class MainNavigationShell extends ConsumerStatefulWidget {
   const MainNavigationShell({super.key});
 
   @override
-  State<MainNavigationShell> createState() => _MainNavigationShellState();
+  ConsumerState<MainNavigationShell> createState() => _MainNavigationShellState();
 }
 
-class _MainNavigationShellState extends State<MainNavigationShell> {
+class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
   int _index = 0;
 
   final _pages = const [
@@ -76,6 +80,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   @override
   Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
+
     return Scaffold(
       body: IndexedStack(
         index: _index,
@@ -84,26 +90,26 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Home',
+            icon: const Icon(Icons.dashboard_outlined),
+            selectedIcon: const Icon(Icons.dashboard),
+            label: Strings.tr(locale, 'dashboard'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.sensors_outlined),
-            selectedIcon: Icon(Icons.sensors),
-            label: 'Live Scan',
+            icon: const Icon(Icons.sensors_outlined),
+            selectedIcon: const Icon(Icons.sensors),
+            label: Strings.tr(locale, 'liveScan'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'History',
+            icon: const Icon(Icons.history_outlined),
+            selectedIcon: const Icon(Icons.history),
+            label: Strings.tr(locale, 'history'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            selectedIcon: const Icon(Icons.settings),
+            label: Strings.tr(locale, 'settings'),
           ),
         ],
       ),

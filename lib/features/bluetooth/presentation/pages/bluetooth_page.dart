@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/l10n/strings.dart';
+import '../../../../core/settings/settings_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../services/bluetooth/bluetooth_connection_service.dart';
@@ -42,6 +44,7 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
   Widget build(BuildContext context) {
     final readinessAsync = ref.watch(bluetoothReadinessProvider);
     final discovery = ref.watch(bluetoothDiscoveryProvider);
+    final locale = ref.watch(localeProvider);
 
     ref.listen(bluetoothReadinessProvider, (prev, next) {
       final value = next.asData?.value;
@@ -52,10 +55,10 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bluetooth Devices'),
+        title: Text(Strings.tr(locale, 'bluetoothDevices')),
         actions: [
           IconButton(
-            tooltip: 'Refresh status',
+            tooltip: Strings.tr(locale, 'refreshStatus'),
             onPressed: () {
               ref.invalidate(bluetoothReadinessProvider);
               final r = ref.read(bluetoothReadinessProvider).asData?.value;
@@ -71,7 +74,7 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: readinessAsync.when(
-            data: (state) => _buildContent(context, state, discovery),
+            data: (state) => _buildContent(context, state, discovery, locale),
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(
               child: EmptyState(
@@ -90,6 +93,7 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
     BuildContext context,
     BluetoothPermissionState readiness,
     BluetoothDiscoveryState discovery,
+    AppLocale locale,
   ) {
     final service = ref.read(bluetoothPermissionServiceProvider);
     final scanning = discovery.status == DiscoveryStatus.scanning;
@@ -103,9 +107,9 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SectionHeader(
-                title: 'Connection Manager',
-                subtitle: 'Bluetooth Classic discovery for HC-05 and compatible devices',
+              SectionHeader(
+                title: Strings.tr(locale, 'connectionManager'),
+                subtitle: Strings.tr(locale, 'connectionManagerSub'),
               ),
               const SizedBox(height: 12),
               Row(
@@ -133,16 +137,18 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.search),
-                    label: Text(scanning ? 'Stop Scan' : 'Scan Devices'),
+                    label: Text(
+                      scanning ? Strings.tr(locale, 'stopScan') : Strings.tr(locale, 'scanDevices'),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              _row('Bluetooth Status', _bluetoothStatusText(readiness)),
-              _row('Permission', _permissionText(readiness.permissionStatus)),
+              _row(Strings.tr(locale, 'bluetoothStatus'), _bluetoothStatusText(readiness)),
+              _row(Strings.tr(locale, 'permission'), _permissionText(readiness.permissionStatus)),
               if (readiness.locationServiceRequired)
                 _row(
-                  'Location Services',
+                  Strings.tr(locale, 'locationServices'),
                   readiness.locationServiceEnabled ? 'On' : 'Off (required)',
                 ),
               const SizedBox(height: 10),
@@ -169,13 +175,17 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
         const _DebugMonitor(),
         const SizedBox(height: 16),
         Expanded(
-          child: _deviceLists(discovery, readiness),
+          child: _deviceLists(discovery, readiness, locale),
         ),
       ],
     );
   }
 
-  Widget _deviceLists(BluetoothDiscoveryState discovery, BluetoothPermissionState readiness) {
+  Widget _deviceLists(
+    BluetoothDiscoveryState discovery,
+    BluetoothPermissionState readiness,
+    AppLocale locale,
+  ) {
     final paired = discovery.pairedDevices;
     final discovered = discovery.discoveredDevices;
     final scanning = discovery.status == DiscoveryStatus.scanning;
@@ -185,7 +195,7 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
       return Center(
         child: EmptyState(
           icon: scanning ? Icons.bluetooth_searching : Icons.devices_other_outlined,
-          title: scanning ? 'Scanning for devices...' : 'No devices found',
+          title: scanning ? Strings.tr(locale, 'scanning') : 'No devices found',
           message: scanning
               ? 'Looking for nearby Bluetooth Classic devices, including HC-05 modules.'
               : readiness.canScan
@@ -199,7 +209,7 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
       children: [
         if (paired.isNotEmpty) ...[
           SectionHeader(
-            title: 'Paired Devices',
+            title: Strings.tr(locale, 'pairedDevices'),
             subtitle: '${paired.length} bonded device(s) available on this phone',
           ),
           const SizedBox(height: 8),
@@ -208,7 +218,7 @@ class _BluetoothPageState extends ConsumerState<BluetoothPage> {
         ],
         if (discovered.isNotEmpty) ...[
           SectionHeader(
-            title: 'Discovered Devices',
+            title: Strings.tr(locale, 'discoveredDevices'),
             subtitle: scanning
                 ? 'Scanning nearby Bluetooth Classic devices...'
                 : '${discovered.length} device(s) found nearby',
@@ -393,6 +403,7 @@ class _DeviceTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final conn = ref.watch(bluetoothConnectionProvider);
     final controller = ref.read(bluetoothConnectionProvider.notifier);
+    final locale = ref.watch(localeProvider);
 
     final busy = conn.status == BluetoothServiceStatus.connecting ||
         conn.status == BluetoothServiceStatus.disconnecting;
@@ -406,21 +417,21 @@ class _DeviceTile extends ConsumerWidget {
       connectButton = ElevatedButton(
         onPressed: null,
         style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-        child: const Text('Connected'),
+        child: Text(Strings.tr(locale, 'connected')),
       );
     } else if (busy) {
       connectButton = OutlinedButton(
         onPressed: null,
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
+            const SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 8),
-            Text('Connecting...'),
+            const SizedBox(width: 8),
+            Text(Strings.tr(locale, 'connectingEllipsis')),
           ],
         ),
       );
@@ -429,7 +440,7 @@ class _DeviceTile extends ConsumerWidget {
         onPressed: otherConnected
             ? null
             : () => controller.connect(address: device.address, deviceName: device.name),
-        child: const Text('Connect'),
+        child: Text(Strings.tr(locale, 'connect')),
       );
     }
 
@@ -455,7 +466,10 @@ class _DeviceTile extends ConsumerWidget {
                     spacing: 8,
                     runSpacing: 4,
                     children: [
-                      _chip(paired ? 'Paired' : 'Discovered', paired ? AppColors.success : AppColors.secondary),
+                      _chip(
+                        paired ? Strings.tr(locale, 'paired') : Strings.tr(locale, 'discovered'),
+                        paired ? AppColors.success : AppColors.secondary,
+                      ),
                       _chip(paired ? 'Source: Paired' : 'Source: Discovered', AppColors.textSecondary),
                       if (device.rssi != null)
                         _chip('RSSI ${device.rssi} dBm', AppColors.textSecondary),
@@ -492,7 +506,9 @@ class _ConnectionStatusCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final conn = ref.watch(bluetoothConnectionProvider);
     final controller = ref.read(bluetoothConnectionProvider.notifier);
+    final locale = ref.watch(localeProvider);
     final v = _connVisual(conn.status);
+    final label = _connLabel(conn.status, locale);
 
     return AppCard(
       child: Column(
@@ -500,12 +516,12 @@ class _ConnectionStatusCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Expanded(child: SectionHeader(title: 'Connection Status')),
-              StatusPill(label: v.label, color: v.color, icon: v.icon),
+              Expanded(child: SectionHeader(title: Strings.tr(locale, 'connectionStatus'))),
+              StatusPill(label: label, color: v.color, icon: v.icon),
             ],
           ),
           const SizedBox(height: 12),
-          ..._statusBody(conn, controller),
+          ..._statusBody(conn, controller, locale),
         ],
       ),
     );
@@ -514,14 +530,15 @@ class _ConnectionStatusCard extends ConsumerWidget {
   List<Widget> _statusBody(
     BluetoothConnectionState conn,
     BluetoothConnectionController controller,
+    AppLocale locale,
   ) {
     switch (conn.status) {
       case BluetoothServiceStatus.disconnected:
         return [
-          _infoRow('Selected Device', conn.deviceName ?? 'None'),
+          _infoRow(Strings.tr(locale, 'selectedDevice'), conn.deviceName ?? Strings.tr(locale, 'none')),
           const SizedBox(height: 8),
-          const Text(
-            'Select a paired device and press Connect.',
+          Text(
+            Strings.tr(locale, 'selectDeviceHint'),
             style: AppTextStyles.caption,
           ),
         ];
@@ -535,57 +552,57 @@ class _ConnectionStatusCard extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: 12),
-              const Expanded(child: Text('در حال اتصال به دستگاه...', style: AppTextStyles.body)),
+              Expanded(child: Text(Strings.tr(locale, 'connectingTo'), style: AppTextStyles.body)),
             ],
           ),
           if (conn.deviceName != null) ...[
             const SizedBox(height: 8),
-            _infoRow('Device', conn.deviceName!),
+            _infoRow(Strings.tr(locale, 'deviceName'), conn.deviceName!),
           ],
         ];
       case BluetoothServiceStatus.connected:
         return [
-          _infoRow('Device', conn.deviceName ?? '—'),
-          _infoRow('MAC Address', conn.deviceAddress ?? '—'),
+          _infoRow(Strings.tr(locale, 'deviceName'), conn.deviceName ?? '—'),
+          _infoRow(Strings.tr(locale, 'macAddress'), conn.deviceAddress ?? '—'),
           if (conn.connectedAt != null)
-            _infoRow('Connected At', _formatTime(conn.connectedAt!)),
+            _infoRow(Strings.tr(locale, 'connectedAt'), _formatTime(conn.connectedAt!)),
           if (conn.lastDataReceivedAt != null)
-            _infoRow('Last Data At', _formatTime(conn.lastDataReceivedAt!)),
+            _infoRow(Strings.tr(locale, 'lastDataAt'), _formatTime(conn.lastDataReceivedAt!)),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
               onPressed: () => controller.disconnect(),
               icon: const Icon(Icons.link_off),
-              label: const Text('Disconnect'),
+              label: Text(Strings.tr(locale, 'disconnect')),
             ),
           ),
         ];
       case BluetoothServiceStatus.disconnecting:
         return [
-          const Row(
+          Row(
             children: [
-              SizedBox(
+              const SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              SizedBox(width: 12),
-              Text('در حال قطع اتصال...', style: AppTextStyles.body),
+              const SizedBox(width: 12),
+              Text(Strings.tr(locale, 'disconnectingMsg'), style: AppTextStyles.body),
             ],
           ),
         ];
       case BluetoothServiceStatus.error:
         return [
-          if (conn.deviceName != null) _infoRow('Device', conn.deviceName!),
+          if (conn.deviceName != null) _infoRow(Strings.tr(locale, 'deviceName'), conn.deviceName!),
           const SizedBox(height: 6),
           Text(
             conn.errorMessage ?? 'Connection failed.',
             style: const TextStyle(color: AppColors.error, fontSize: 13),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Press Connect again on the device to retry.',
+          Text(
+            Strings.tr(locale, 'retryHint'),
             style: AppTextStyles.caption,
           ),
         ];
@@ -603,11 +620,12 @@ class _DebugMonitor extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final controller = ref.read(bluetoothConnectionProvider.notifier);
+    final locale = ref.watch(localeProvider);
     final events = conn.recentEvents.reversed.toList();
 
-    Widget empty = const Padding(
-      padding: EdgeInsets.symmetric(vertical: 10),
-      child: Text('هنوز داده‌ای از دستگاه دریافت نشده است.', style: AppTextStyles.caption),
+    Widget empty = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Text(Strings.tr(locale, 'noDataYet'), style: AppTextStyles.caption),
     );
 
     Widget list = Container(
@@ -661,24 +679,24 @@ class _DebugMonitor extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: SectionHeader(
-                  title: 'Bluetooth Debug Monitor',
-                  subtitle: 'Raw hardware data (no parsing)',
+                  title: Strings.tr(locale, 'debugMonitor'),
+                  subtitle: Strings.tr(locale, 'debugMonitorSub'),
                 ),
               ),
               IconButton(
-                tooltip: 'Clear debug',
+                tooltip: Strings.tr(locale, 'clearDebug'),
                 onPressed: () => controller.clearDebug(),
                 icon: const Icon(Icons.delete_outline),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          _infoRow('Received Events', '${conn.dataEventCount}'),
-          _infoRow('Total Bytes', '${conn.totalBytesReceived}'),
+          _infoRow(Strings.tr(locale, 'receivedEvents'), '${conn.dataEventCount}'),
+          _infoRow(Strings.tr(locale, 'totalBytes'), '${conn.totalBytesReceived}'),
           _infoRow(
-            'Last Received',
+            Strings.tr(locale, 'lastReceived'),
             conn.lastDataReceivedAt != null ? _formatTime(conn.lastDataReceivedAt!) : '—',
           ),
           if (conn.lastRawData != null) ...[
@@ -718,10 +736,10 @@ class _DebugMonitor extends ConsumerWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Expanded(
-                child: Text('Recent Events', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+              Expanded(
+                child: Text(Strings.tr(locale, 'recentEvents'), style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
               ),
-              const Text('newest first', style: AppTextStyles.caption),
+              Text(Strings.tr(locale, 'newestFirst'), style: AppTextStyles.caption),
             ],
           ),
           const SizedBox(height: 6),
@@ -729,6 +747,21 @@ class _DebugMonitor extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+String _connLabel(BluetoothServiceStatus s, AppLocale locale) {
+  switch (s) {
+    case BluetoothServiceStatus.disconnected:
+      return Strings.tr(locale, 'disconnected');
+    case BluetoothServiceStatus.connecting:
+      return Strings.tr(locale, 'connecting');
+    case BluetoothServiceStatus.connected:
+      return Strings.tr(locale, 'connected');
+    case BluetoothServiceStatus.disconnecting:
+      return Strings.tr(locale, 'disconnecting');
+    case BluetoothServiceStatus.error:
+      return Strings.tr(locale, 'error');
   }
 }
 

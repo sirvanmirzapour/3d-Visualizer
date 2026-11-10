@@ -3,12 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/app.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/l10n/strings.dart';
+import '../../../../core/settings/settings_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../services/bluetooth/bluetooth_connection_service.dart';
 import '../../../../shared/widgets/app_widgets.dart';
 import '../../../bluetooth/presentation/controllers/bluetooth_connection_provider.dart';
+import '../../../scan_history/data/scan_repository.dart';
 import '../widgets/field_map_widget.dart';
+import '../widgets/heatmap_widget.dart';
+
+enum HeatmapMode { smooth, square }
 
 class LiveScanPage extends ConsumerStatefulWidget {
   final int rows;
@@ -31,14 +37,36 @@ class LiveScanPage extends ConsumerStatefulWidget {
 }
 
 class _LiveScanPageState extends ConsumerState<LiveScanPage> {
-  void _showUiOnly(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
+  HeatmapMode _mode = HeatmapMode.smooth;
+
+  void _showMsg(String msg) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _save() async {
+    final conn = ref.read(bluetoothConnectionProvider);
+    final measurements = conn.measurements.take(widget.rows * widget.columns).toList();
+    if (measurements.isEmpty) {
+      _showMsg(Strings.tr(ref.read(localeProvider), 'nothingToSave'));
+      return;
+    }
+    final record = ScanRecord(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      createdAt: DateTime.now(),
+      rows: widget.rows,
+      columns: widget.columns,
+      measurements: measurements,
     );
+    await ref.read(scanRepositoryProvider).add(record);
+    ref.invalidate(savedScansProvider);
+    _showMsg(Strings.tr(ref.read(localeProvider), 'scanSaved'));
   }
 
   @override
   Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
     final total = widget.rows * widget.columns;
     final conn = ref.watch(bluetoothConnectionProvider);
     final measurements = conn.measurements;
@@ -52,28 +80,62 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (widget.embedded) _embeddedIntro(context),
+            if (widget.embedded) _embeddedIntro(context, locale),
             if (widget.embedded) const SizedBox(height: 12),
-            _header(total, conn.status, conn.deviceName),
+            _header(total, conn.status, conn.deviceName, locale),
             const SizedBox(height: 12),
-            _valueCard(measurements),
+            _valueCard(measurements, locale),
             const SizedBox(height: 12),
-            const SectionHeader(
-              title: 'Heatmap',
-              subtitle: 'Each received reading fills one cell (in order)',
+            Row(
+              children: [
+                Expanded(
+                  child: SectionHeader(
+                    title: Strings.tr(locale, 'heatmap'),
+                    subtitle: Strings.tr(locale, 'heatmapSub'),
+                  ),
+                ),
+                SegmentedButton<HeatmapMode>(
+                  segments: [
+                    ButtonSegment(
+                      value: HeatmapMode.smooth,
+                      label: Text(Strings.tr(locale, 'modeSmooth')),
+                    ),
+                    ButtonSegment(
+                      value: HeatmapMode.square,
+                      label: Text(Strings.tr(locale, 'modeSquare')),
+                    ),
+                  ],
+                  selected: {_mode},
+                  onSelectionChanged: (s) => setState(() => _mode = s.first),
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  FieldMapWidget(
-                    rows: widget.rows,
-                    columns: widget.columns,
-                    measurements: measurements,
-                  ),
+                  if (_mode == HeatmapMode.smooth)
+                    FieldMapWidget(
+                      rows: widget.rows,
+                      columns: widget.columns,
+                      measurements: measurements,
+                    )
+                  else
+                    AspectRatio(
+                      aspectRatio: widget.columns / widget.rows,
+                      child: HeatmapWidget(
+                        rows: widget.rows,
+                        columns: widget.columns,
+                        values: measurements,
+                      ),
+                    ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Pinch to zoom and drag to inspect the grid.',
                     style: AppTextStyles.caption,
                   ),
@@ -81,9 +143,9 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
               ),
             ),
             const SizedBox(height: 12),
-            _infoSection(total, received, remaining, progress),
+            _infoSection(total, received, remaining, progress, locale),
             const SizedBox(height: 12),
-            _controls(context),
+            _controls(context, locale),
           ],
         ),
       ),
@@ -91,31 +153,29 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
 
     if (widget.embedded) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Live Scan')),
+        appBar: AppBar(title: Text(Strings.tr(locale, 'liveScan'))),
         body: content,
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Live Scan'),
-      ),
+      appBar: AppBar(title: Text(Strings.tr(locale, 'liveScan'))),
       body: content,
     );
   }
 
-  Widget _embeddedIntro(BuildContext context) {
+  Widget _embeddedIntro(BuildContext context, AppLocale locale) {
     return AppCard(
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Ready for a new session', style: AppTextStyles.title),
-                SizedBox(height: 4),
+                Text(Strings.tr(locale, 'readyNewSession'), style: AppTextStyles.title),
+                const SizedBox(height: 4),
                 Text(
-                  'Configure dimensions to open a dedicated live scan view.',
+                  Strings.tr(locale, 'readyNewSessionSub'),
                   style: AppTextStyles.caption,
                 ),
               ],
@@ -123,36 +183,36 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pushNamed(context, AppRoutes.scanConfig),
-            child: const Text('Configure'),
+            child: Text(Strings.tr(locale, 'configure')),
           ),
         ],
       ),
     );
   }
 
-  Widget _header(int total, BluetoothServiceStatus status, String? deviceName) {
+  Widget _header(int total, BluetoothServiceStatus status, String? deviceName, AppLocale locale) {
     late String label;
     late Color color;
     late IconData icon;
     switch (status) {
       case BluetoothServiceStatus.connected:
-        label = 'Receiving';
+        label = Strings.tr(locale, 'receiving');
         color = AppColors.success;
         icon = Icons.graphic_eq;
         break;
       case BluetoothServiceStatus.connecting:
       case BluetoothServiceStatus.disconnecting:
-        label = 'Connecting';
+        label = Strings.tr(locale, 'connecting');
         color = AppColors.warning;
         icon = Icons.hourglass_top;
         break;
       case BluetoothServiceStatus.error:
-        label = 'Error';
+        label = Strings.tr(locale, 'error');
         color = AppColors.error;
         icon = Icons.error_outline;
         break;
       case BluetoothServiceStatus.disconnected:
-        label = 'Idle';
+        label = Strings.tr(locale, 'idle');
         color = AppColors.secondary;
         icon = Icons.pause_circle_outline;
         break;
@@ -164,22 +224,20 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
         children: [
           Row(
             children: [
-              const Expanded(
-                child: Text('Live Scan', style: AppTextStyles.headline),
-              ),
+              Expanded(child: Text(Strings.tr(locale, 'liveScan'), style: AppTextStyles.headline)),
               StatusPill(label: label, color: color, icon: icon),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Grid: ${widget.rows} × ${widget.columns} ($total points)',
+            Strings.tr(locale, 'gridNotation', {'rows': '$widget.rows', 'columns': '$widget.columns', 'points': '$total'}),
             style: AppTextStyles.body,
           ),
           const SizedBox(height: 4),
           Text(
             status == BluetoothServiceStatus.connected
-                ? 'Receiving data from ${deviceName ?? 'device'}'
-                : 'Connect a Bluetooth device to receive scan data.',
+                ? '${Strings.tr(locale, 'receivingFrom')} ${deviceName ?? 'device'}'
+                : Strings.tr(locale, 'connectDeviceHint'),
             style: AppTextStyles.caption,
           ),
         ],
@@ -187,15 +245,15 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
     );
   }
 
-  Widget _valueCard(List<num> measurements) {
+  Widget _valueCard(List<num> measurements, AppLocale locale) {
     final last = measurements.isEmpty ? null : measurements.last;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            title: 'Latest Value',
-            subtitle: 'Most recent reading from the device',
+          SectionHeader(
+            title: Strings.tr(locale, 'latestValue'),
+            subtitle: Strings.tr(locale, 'latestValueSub'),
           ),
           const SizedBox(height: 18),
           Center(
@@ -209,8 +267,8 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
                 const SizedBox(height: 8),
                 Text(
                   last == null
-                      ? 'Waiting for data'
-                      : 'Reading ${measurements.length}',
+                      ? Strings.tr(locale, 'waitingForData')
+                      : '${Strings.tr(locale, 'reading')} ${measurements.length}',
                   style: AppTextStyles.caption,
                 ),
               ],
@@ -221,20 +279,20 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
     );
   }
 
-  Widget _infoSection(int total, int received, int remaining, double progress) {
+  Widget _infoSection(int total, int received, int remaining, double progress, AppLocale locale) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            title: 'Scan Information',
-            subtitle: 'Live progress',
+          SectionHeader(
+            title: Strings.tr(locale, 'scanInfo'),
+            subtitle: Strings.tr(locale, 'scanInfoSub'),
           ),
           const SizedBox(height: 12),
-          _row('Total Points', '$total'),
-          _row('Received Points', '$received'),
-          _row('Remaining Points', '$remaining'),
-          _row('Progress Percentage', '${(progress * 100).toStringAsFixed(0)}%'),
+          _row(Strings.tr(locale, 'totalPoints'), '$total'),
+          _row(Strings.tr(locale, 'receivedPoints'), '$received'),
+          _row(Strings.tr(locale, 'remainingPoints'), '$remaining'),
+          _row(Strings.tr(locale, 'progressPercentage'), '${(progress * 100).toStringAsFixed(0)}%'),
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
@@ -250,15 +308,12 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
     );
   }
 
-  Widget _controls(BuildContext context) {
+  Widget _controls(BuildContext context, AppLocale locale) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
-            title: 'Controls',
-            subtitle: 'Reset starts a fresh grid',
-          ),
+          SectionHeader(title: Strings.tr(locale, 'controls')),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -269,18 +324,18 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
                   ref.read(bluetoothConnectionProvider.notifier).clearMeasurements();
                 },
                 icon: const Icon(Icons.refresh),
-                label: const Text('Reset Data'),
+                label: Text(Strings.tr(locale, 'resetData')),
               ),
-              OutlinedButton.icon(
-                onPressed: () => _showUiOnly('Saving will be implemented in a later phase.'),
+              ElevatedButton.icon(
+                onPressed: _save,
                 icon: const Icon(Icons.save_outlined),
-                label: const Text('Save Scan'),
+                label: Text(Strings.tr(locale, 'saveScan')),
               ),
               if (!widget.embedded)
                 TextButton.icon(
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.scanConfig),
                   icon: const Icon(Icons.tune),
-                  label: const Text('Change Grid'),
+                  label: Text(Strings.tr(locale, 'changeGrid')),
                 ),
             ],
           ),
