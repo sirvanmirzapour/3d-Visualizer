@@ -7,11 +7,13 @@ import '../painters/heatmap_grid_painter.dart';
 class HeatmapWidget extends StatelessWidget {
   final int rows;
   final int columns;
+  final List<num>? values;
 
   const HeatmapWidget({
     super.key,
     required this.rows,
     required this.columns,
+    this.values,
   });
 
   @override
@@ -31,7 +33,7 @@ class HeatmapWidget extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: CustomPaint(
-              painter: HeatmapGridPainter(rows: rows, columns: columns),
+              painter: HeatmapGridPainter(rows: rows, columns: columns, values: values),
               child: const SizedBox.expand(),
             ),
           ),

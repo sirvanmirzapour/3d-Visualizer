@@ -1,0 +1,206 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+
+class FieldMapWidget extends StatefulWidget {
+  final int rows;
+  final int columns;
+  final List<num> measurements;
+
+  const FieldMapWidget({
+    super.key,
+    required this.rows,
+    required this.columns,
+    required this.measurements,
+  });
+
+  @override
+  State<FieldMapWidget> createState() => _FieldMapWidgetState();
+}
+
+class _FieldMapWidgetState extends State<FieldMapWidget> {
+  static const List<double> _stops = [0.0, 0.25, 0.5, 0.75, 1.0];
+  static const List<Color> _colors = [
+    Color(0xFF0B1026),
+    Color(0xFF22D3EE),
+    Color(0xFF34D399),
+    Color(0xFFFACC15),
+    Color(0xFFEF4444),
+  ];
+
+  ui.Image? _image;
+  double _min = 0;
+  double _max = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _rebuild();
+  }
+
+  @override
+  void didUpdateWidget(covariant FieldMapWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.measurements != widget.measurements ||
+        oldWidget.rows != widget.rows ||
+        oldWidget.columns != widget.columns) {
+      _rebuild();
+    }
+  }
+
+  void _rebuild() {
+    final rows = widget.rows;
+    final cols = widget.columns;
+    final samples = widget.measurements.take(rows * cols).toList();
+    if (samples.length < 2) {
+      setState(() => _image = null);
+      return;
+    }
+
+    var mn = samples.first.toDouble();
+    var mx = samples.first.toDouble();
+    for (final v in samples) {
+      final d = v.toDouble();
+      if (d < mn) mn = d;
+      if (d > mx) mx = d;
+    }
+    final span = (mx - mn).abs() < 1e-9 ? 1.0 : (mx - mn);
+    _min = mn;
+    _max = mx;
+
+    const outW = 180;
+    final outH = (outW * rows / cols).round().clamp(40, 480);
+
+    final data = ByteData(outW * outH * 4);
+    const eps = 1e-3;
+    for (var y = 0; y < outH; y++) {
+      final gy = (y / outH) * rows;
+      for (var x = 0; x < outW; x++) {
+        final gx = (x / outW) * cols;
+        double sw = 0;
+        double sv = 0;
+        for (var i = 0; i < samples.length; i++) {
+          final r = (i ~/ cols) + 0.5;
+          final c = (i % cols) + 0.5;
+          final dx = gx - c;
+          final dy = gy - r;
+          final w = 1.0 / (dx * dx + dy * dy + eps);
+          sw += w;
+          sv += w * samples[i].toDouble();
+        }
+        final norm = sw > 0 ? sv / sw : mn;
+        final t = ((norm - mn) / span).clamp(0.0, 1.0);
+        final color = _colorFor(t.toDouble());
+        final o = (y * outW + x) * 4;
+        data.setUint8(o, (color.r * 255).round().clamp(0, 255).toInt());
+        data.setUint8(o + 1, (color.g * 255).round().clamp(0, 255).toInt());
+        data.setUint8(o + 2, (color.b * 255).round().clamp(0, 255).toInt());
+        data.setUint8(o + 3, 255);
+      }
+    }
+
+    ui.decodeImageFromPixels(
+      data.buffer.asUint8List(),
+      outW,
+      outH,
+      ui.PixelFormat.rgba8888,
+      (img) {
+        if (!mounted) return;
+        setState(() => _image = img);
+      },
+    );
+  }
+
+  Color _colorFor(double t) {
+    if (t <= 0) return _colors.first;
+    if (t >= 1) return _colors.last;
+    for (var i = 0; i < _stops.length - 1; i++) {
+      if (t >= _stops[i] && t <= _stops[i + 1]) {
+        final f = (t - _stops[i]) / (_stops[i + 1] - _stops[i]);
+        return Color.lerp(_colors[i], _colors[i + 1], f)!;
+      }
+    }
+    return _colors.last;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_image == null) {
+      return AspectRatio(
+        aspectRatio: widget.columns / widget.rows,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF191F29),
+            border: Border.all(color: const Color(0xFF334155)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            'Start receiving at least 2 points\nto render the field map',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: widget.columns / widget.rows,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: InteractiveViewer(
+              minScale: 1,
+              maxScale: 8,
+              boundaryMargin: const EdgeInsets.all(24),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF101319),
+                  border: Border.all(color: const Color(0xFF334155)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: RawImage(image: _image, fit: BoxFit.fill),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Text(_fmt(_min), style: _legendText),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 10,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  gradient: const LinearGradient(
+                    colors: _colors,
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(_fmt(_max), style: _legendText),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _fmt(double v) {
+    final s = v.toStringAsFixed(2);
+    return s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  static const TextStyle _legendText = TextStyle(
+    color: Color(0xFF94A3B8),
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+  );
+}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,6 +41,7 @@ class BluetoothConnectionState {
   final int totalBytesReceived;
   final Uint8List? lastRawData;
   final List<RawDataEvent> recentEvents;
+  final List<num> measurements;
 
   const BluetoothConnectionState({
     required this.status,
@@ -53,6 +55,7 @@ class BluetoothConnectionState {
     this.totalBytesReceived = 0,
     this.lastRawData,
     this.recentEvents = const [],
+    this.measurements = const [],
   });
 
   factory BluetoothConnectionState.initial() => const BluetoothConnectionState(
@@ -71,6 +74,7 @@ class BluetoothConnectionState {
     int? totalBytesReceived,
     Uint8List? lastRawData,
     List<RawDataEvent>? recentEvents,
+    List<num>? measurements,
     bool clearError = false,
     bool clearData = false,
   }) {
@@ -86,6 +90,7 @@ class BluetoothConnectionState {
       totalBytesReceived: totalBytesReceived ?? this.totalBytesReceived,
       lastRawData: clearData ? null : (lastRawData ?? this.lastRawData),
       recentEvents: recentEvents ?? this.recentEvents,
+      measurements: measurements ?? this.measurements,
     );
   }
 }
@@ -99,6 +104,9 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
   StreamSubscription<Uint8List>? _dataSubscription;
 
   static const int maxRecentEvents = 50;
+  static const int maxMeasurements = 1500;
+
+  String _lineBuffer = '';
 
   BluetoothConnectionService get _service => ref.read(bluetoothConnectionServiceProvider);
 
@@ -127,6 +135,7 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
         totalBytesReceived: state.totalBytesReceived,
         lastRawData: state.lastRawData,
         recentEvents: state.recentEvents,
+        measurements: state.measurements,
       );
     } else {
       _updateState(
@@ -144,6 +153,21 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
   void _onData(Uint8List data) {
     if (_disposed) return;
     if (state.status != BluetoothServiceStatus.connected) return;
+
+    final measurements = <num>[...state.measurements];
+    _lineBuffer += utf8.decode(data, allowMalformed: true);
+    while (true) {
+      final br = _indexOfLineBreak(_lineBuffer);
+      if (br < 0) break;
+      final raw = _lineBuffer.substring(0, br).trim();
+      _lineBuffer = _lineBuffer.substring(br + 1);
+      if (raw.isEmpty) continue;
+      final value = num.tryParse(raw);
+      if (value != null && measurements.length < maxMeasurements) {
+        measurements.add(value);
+      }
+    }
+
     final now = DateTime.now();
     final event = RawDataEvent(
       data: data,
@@ -161,7 +185,21 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
       totalBytesReceived: state.totalBytesReceived + data.length,
       lastRawData: data,
       recentEvents: events,
+      measurements: measurements,
     );
+  }
+
+  void clearMeasurements() {
+    if (_disposed) return;
+    _updateState(measurements: const []);
+  }
+
+  int _indexOfLineBreak(String s) {
+    final n = s.indexOf('\n');
+    final r = s.indexOf('\r');
+    if (n < 0) return r;
+    if (r < 0) return n;
+    return n < r ? n : r;
   }
 
   void clearDebug() {
@@ -178,6 +216,7 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
       totalBytesReceived: 0,
       lastRawData: null,
       recentEvents: const [],
+      measurements: state.measurements,
     );
   }
 
@@ -204,6 +243,7 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
     int? totalBytesReceived,
     Uint8List? lastRawData,
     List<RawDataEvent>? recentEvents,
+    List<num>? measurements,
     bool clearError = false,
     bool clearData = false,
   }) {
@@ -221,6 +261,7 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
       totalBytesReceived: totalBytesReceived ?? current.totalBytesReceived,
       lastRawData: clearData ? null : (lastRawData ?? current.lastRawData),
       recentEvents: recentEvents ?? current.recentEvents,
+      measurements: measurements ?? current.measurements,
     );
   }
 

@@ -116,6 +116,26 @@ void main() {
       expect(controller.state.recentEvents.length, 2);
     });
 
+    test('parses line-based ASCII measurements across chunk boundaries', () async {
+      final transport = FakeTransport();
+      final controller = controllerOf(createContainer(transport));
+
+      controller.connect(address: 'AA:BB:CC:DD:EE:FF');
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      transport.link!.addInput(Uint8List.fromList('123\r\n'.codeUnits));
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(controller.state.measurements, [123]);
+
+      transport.link!.addInput(Uint8List.fromList('45'.codeUnits));
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(controller.state.measurements, [123]);
+
+      transport.link!.addInput(Uint8List.fromList('6\n'.codeUnits));
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(controller.state.measurements, [123, 456]);
+    });
+
     test('recent events buffer is bounded to maxRecentEvents', () async {
       final transport = FakeTransport();
       final controller = controllerOf(createContainer(transport));

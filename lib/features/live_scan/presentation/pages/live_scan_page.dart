@@ -1,13 +1,16 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/app.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../services/bluetooth/bluetooth_connection_service.dart';
 import '../../../../shared/widgets/app_widgets.dart';
-import '../widgets/heatmap_widget.dart';
+import '../../../bluetooth/presentation/controllers/bluetooth_connection_provider.dart';
+import '../widgets/field_map_widget.dart';
 
-class LiveScanPage extends StatefulWidget {
+class LiveScanPage extends ConsumerStatefulWidget {
   final int rows;
   final int columns;
   final bool embedded;
@@ -24,12 +27,10 @@ class LiveScanPage extends StatefulWidget {
         embedded = true;
 
   @override
-  State<LiveScanPage> createState() => _LiveScanPageState();
+  ConsumerState<LiveScanPage> createState() => _LiveScanPageState();
 }
 
-class _LiveScanPageState extends State<LiveScanPage> {
-  bool _uiRunning = false;
-
+class _LiveScanPageState extends ConsumerState<LiveScanPage> {
   void _showUiOnly(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
@@ -39,9 +40,11 @@ class _LiveScanPageState extends State<LiveScanPage> {
   @override
   Widget build(BuildContext context) {
     final total = widget.rows * widget.columns;
-    const received = 0;
+    final conn = ref.watch(bluetoothConnectionProvider);
+    final measurements = conn.measurements;
+    final received = measurements.length > total ? total : measurements.length;
     final remaining = total - received;
-    const progress = 0.0;
+    final progress = total == 0 ? 0.0 : received / total;
 
     final content = SafeArea(
       child: SingleChildScrollView(
@@ -51,20 +54,24 @@ class _LiveScanPageState extends State<LiveScanPage> {
           children: [
             if (widget.embedded) _embeddedIntro(context),
             if (widget.embedded) const SizedBox(height: 12),
-            _header(total),
+            _header(total, conn.status, conn.deviceName),
             const SizedBox(height: 12),
-            _valueCard(),
+            _valueCard(measurements),
             const SizedBox(height: 12),
             const SectionHeader(
               title: 'Heatmap',
-              subtitle: 'Grid structure ready for future measurement rendering',
+              subtitle: 'Each received reading fills one cell (in order)',
             ),
             const SizedBox(height: 8),
             AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  HeatmapWidget(rows: widget.rows, columns: widget.columns),
+                  FieldMapWidget(
+                    rows: widget.rows,
+                    columns: widget.columns,
+                    measurements: measurements,
+                  ),
                   const SizedBox(height: 8),
                   const Text(
                     'Pinch to zoom and drag to inspect the grid.',
@@ -123,7 +130,34 @@ class _LiveScanPageState extends State<LiveScanPage> {
     );
   }
 
-  Widget _header(int total) {
+  Widget _header(int total, BluetoothServiceStatus status, String? deviceName) {
+    late String label;
+    late Color color;
+    late IconData icon;
+    switch (status) {
+      case BluetoothServiceStatus.connected:
+        label = 'Receiving';
+        color = AppColors.success;
+        icon = Icons.graphic_eq;
+        break;
+      case BluetoothServiceStatus.connecting:
+      case BluetoothServiceStatus.disconnecting:
+        label = 'Connecting';
+        color = AppColors.warning;
+        icon = Icons.hourglass_top;
+        break;
+      case BluetoothServiceStatus.error:
+        label = 'Error';
+        color = AppColors.error;
+        icon = Icons.error_outline;
+        break;
+      case BluetoothServiceStatus.disconnected:
+        label = 'Idle';
+        color = AppColors.secondary;
+        icon = Icons.pause_circle_outline;
+        break;
+    }
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,11 +167,7 @@ class _LiveScanPageState extends State<LiveScanPage> {
               const Expanded(
                 child: Text('Live Scan', style: AppTextStyles.headline),
               ),
-              StatusPill(
-                label: _uiRunning ? 'Preparing' : 'Idle',
-                color: _uiRunning ? AppColors.warning : AppColors.secondary,
-                icon: _uiRunning ? Icons.hourglass_top : Icons.pause_circle_outline,
-              ),
+              StatusPill(label: label, color: color, icon: icon),
             ],
           ),
           const SizedBox(height: 8),
@@ -146,33 +176,41 @@ class _LiveScanPageState extends State<LiveScanPage> {
             style: AppTextStyles.body,
           ),
           const SizedBox(height: 4),
-          const Text('Scan status: Waiting for hardware integration', style: AppTextStyles.caption),
+          Text(
+            status == BluetoothServiceStatus.connected
+                ? 'Receiving data from ${deviceName ?? 'device'}'
+                : 'Connect a Bluetooth device to receive scan data.',
+            style: AppTextStyles.caption,
+          ),
         ],
       ),
     );
   }
 
-  Widget _valueCard() {
+  Widget _valueCard(List<num> measurements) {
+    final last = measurements.isEmpty ? null : measurements.last;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SectionHeader(
             title: 'Latest Value',
-            subtitle: 'Real-time measurement placeholder',
+            subtitle: 'Most recent reading from the device',
           ),
           const SizedBox(height: 18),
           Center(
             child: Column(
               children: [
                 Text(
-                  'Waiting for data',
-                  style: AppTextStyles.valueLarge.copyWith(fontSize: 28),
+                  last == null ? '—' : last.toString(),
+                  style: AppTextStyles.valueLarge.copyWith(fontSize: 32),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'No device data available in Phase 1',
+                Text(
+                  last == null
+                      ? 'Waiting for data'
+                      : 'Reading ${measurements.length}',
                   style: AppTextStyles.caption,
                 ),
               ],
@@ -190,7 +228,7 @@ class _LiveScanPageState extends State<LiveScanPage> {
         children: [
           const SectionHeader(
             title: 'Scan Information',
-            subtitle: 'Progress tracking structure',
+            subtitle: 'Live progress',
           ),
           const SizedBox(height: 12),
           _row('Total Points', '$total'),
@@ -219,31 +257,22 @@ class _LiveScanPageState extends State<LiveScanPage> {
         children: [
           const SectionHeader(
             title: 'Controls',
-            subtitle: 'UI actions only in Phase 1',
+            subtitle: 'Reset starts a fresh grid',
           ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() => _uiRunning = true);
-                  _showUiOnly('Scan start is a placeholder in Phase 1.');
-                },
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Start Scan'),
-              ),
               OutlinedButton.icon(
                 onPressed: () {
-                  setState(() => _uiRunning = false);
-                  _showUiOnly('Scan stop is a placeholder in Phase 1.');
+                  ref.read(bluetoothConnectionProvider.notifier).clearMeasurements();
                 },
-                icon: const Icon(Icons.stop),
-                label: const Text('Stop Scan'),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reset Data'),
               ),
               OutlinedButton.icon(
-                onPressed: () => _showUiOnly('Saving will be implemented in Phase 5.'),
+                onPressed: () => _showUiOnly('Saving will be implemented in a later phase.'),
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Save Scan'),
               ),
