@@ -1,15 +1,20 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/app.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../services/bluetooth/bluetooth_permission_service.dart';
 import '../../../../shared/widgets/app_widgets.dart';
+import '../../../bluetooth/presentation/controllers/bluetooth_permission_providers.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final readiness = ref.watch(bluetoothReadinessProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Magnetic Scanner'),
@@ -32,9 +37,9 @@ class DashboardPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(context),
+              _buildHeader(context, readiness),
               const SizedBox(height: 16),
-              _buildDeviceStatusCard(context),
+              _buildDeviceStatusCard(context, readiness),
               const SizedBox(height: 16),
               _buildStartScanCard(context),
               const SizedBox(height: 16),
@@ -58,7 +63,14 @@ class DashboardPage extends StatelessWidget {
     }
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(
+    BuildContext context,
+    AsyncValue<BluetoothPermissionState> readiness,
+  ) {
+    final status = readiness.asData?.value;
+    final label = _headerStatus(status);
+    final color = _headerColor(status);
+    const icon = Icons.link_off;
     return AppCard(
       child: Row(
         children: [
@@ -84,17 +96,32 @@ class DashboardPage extends StatelessWidget {
               ],
             ),
           ),
-          const StatusPill(
-            label: 'Disconnected',
-            color: AppColors.error,
-            icon: Icons.link_off,
-          ),
+          StatusPill(label: label, color: color, icon: icon),
         ],
       ),
     );
   }
 
-  Widget _buildDeviceStatusCard(BuildContext context) {
+  String _headerStatus(BluetoothPermissionState? state) {
+    if (state == null) return 'Checking...';
+    if (!state.supported) return 'Unsupported';
+    if (!state.enabled) return 'Bluetooth Off';
+    if (!state.canScan) return 'Setup Needed';
+    return 'Disconnected';
+  }
+
+  Color _headerColor(BluetoothPermissionState? state) {
+    if (state == null) return AppColors.textSecondary;
+    if (!state.supported) return AppColors.error;
+    if (state.canScan) return AppColors.error;
+    return AppColors.warning;
+  }
+
+  Widget _buildDeviceStatusCard(
+    BuildContext context,
+    AsyncValue<BluetoothPermissionState> readiness,
+  ) {
+    final state = readiness.asData?.value;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,7 +131,7 @@ class DashboardPage extends StatelessWidget {
             subtitle: 'Bluetooth Classic connection overview',
           ),
           const SizedBox(height: 14),
-          _infoRow('Bluetooth Status', 'Off / Unavailable'),
+          _infoRow('Bluetooth Status', _btStatus(state, readiness)),
           _infoRow('Device Name', 'No device selected'),
           _infoRow('Connection Status', 'Disconnected'),
           _infoRow('Last Measurement', '—'),
@@ -120,6 +147,19 @@ class DashboardPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _btStatus(
+    BluetoothPermissionState? state,
+    AsyncValue<BluetoothPermissionState> readiness,
+  ) {
+    if (readiness.isLoading) return 'Checking...';
+    if (readiness.hasError) return 'Unavailable';
+    if (state == null) return 'Unavailable';
+    if (!state.supported) return 'Unsupported';
+    if (!state.enabled) return 'Off';
+    if (state.canScan) return 'On (ready)';
+    return 'On (setup needed)';
   }
 
   Widget _infoRow(String label, String value) {
@@ -221,15 +261,15 @@ class DashboardPage extends StatelessWidget {
   }
 
   Widget _buildStats() {
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(
+        SectionHeader(
           title: 'Overview',
           subtitle: 'Scan activity summary',
         ),
-        const SizedBox(height: 10),
-        const Row(
+        SizedBox(height: 10),
+        Row(
           children: [
             Expanded(
               child: MetricTile(
@@ -250,8 +290,8 @@ class DashboardPage extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        const MetricTile(
+        SizedBox(height: 12),
+        MetricTile(
           label: 'Incomplete Scans',
           value: '0',
           icon: Icons.timelapse,
