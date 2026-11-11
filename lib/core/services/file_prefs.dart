@@ -2,16 +2,17 @@ import 'dart:io';
 
 /// Minimal key/value file store that works without any native plugin.
 ///
-/// On Android it writes to the app-specific external files directory
-/// (`/storage/emulated/0/Android/data/<package>/files/`) which requires no
-/// permission. On other platforms it falls back to the system temp directory.
+/// On Android it writes to the app's INTERNAL files directory
+/// (`/data/user/0/<package>/files/`). This requires no permission, always
+/// persists across app restarts, and is not affected by scoped storage.
+/// On other platforms it falls back to the system temp directory.
 /// All failures are swallowed so the app keeps working (e.g. on desktop).
 class FilePrefs {
   static const String package = 'com.magnetic.scanner.magnetic_field_scanner';
 
   static String get _dir {
     if (Platform.isAndroid) {
-      return '/storage/emulated/0/Android/data/$package/files';
+      return '/data/user/0/$package/files';
     }
     return Directory.systemTemp.path;
   }

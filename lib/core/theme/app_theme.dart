@@ -107,6 +107,12 @@ class AppTheme {
         color: border,
         thickness: 1,
       ),
+      textTheme: TextTheme(
+        headlineSmall: AppTextStyles.headline.copyWith(color: textPrimary),
+        titleMedium: AppTextStyles.title.copyWith(color: textPrimary),
+        bodyMedium: AppTextStyles.body.copyWith(color: textPrimary),
+        bodySmall: AppTextStyles.caption.copyWith(color: textSecondary),
+      ),
     );
   }
 
@@ -134,6 +140,7 @@ class AppTheme {
         centerTitle: false,
         titleTextStyle: AppTextStyles.title,
       ),
+      splashFactory: InkRipple.splashFactory,
       cardTheme: CardThemeData(
         color: AppColors.card,
         elevation: 0,
@@ -187,6 +194,15 @@ class AppTheme {
             borderRadius: BorderRadius.circular(12),
           ),
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          elevation: 2,
+        ).copyWith(
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return AppColors.surface;
+            return AppColors.primary;
+          }),
+          shadowColor: WidgetStateProperty.all(
+            AppColors.primary.withValues(alpha: 0.35),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -203,11 +219,11 @@ class AppTheme {
         color: Color(0xFF334155),
         thickness: 1,
       ),
-      textTheme: const TextTheme(
-        headlineSmall: AppTextStyles.headline,
-        titleMedium: AppTextStyles.title,
-        bodyMedium: AppTextStyles.body,
-        bodySmall: AppTextStyles.caption,
+      textTheme: TextTheme(
+        headlineSmall: AppTextStyles.headline.copyWith(color: AppColors.textPrimary),
+        titleMedium: AppTextStyles.title.copyWith(color: AppColors.textPrimary),
+        bodyMedium: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+        bodySmall: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
       ),
     );
   }

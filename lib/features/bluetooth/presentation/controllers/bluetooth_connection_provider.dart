@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/settings/settings_controller.dart';
 import '../../../../services/bluetooth/bluetooth_connection_service.dart';
 
 class RawDataEvent {
@@ -147,6 +148,13 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
         errorMessage: snapshot.errorMessage,
         errorDetails: snapshot.errorDetails,
       );
+      if (snapshot.status == BluetoothServiceStatus.connected &&
+          snapshot.deviceAddress != null) {
+        ref.read(settingsProvider.notifier).setLastDevice(
+              snapshot.deviceAddress,
+              snapshot.deviceName,
+            );
+      }
     }
   }
 

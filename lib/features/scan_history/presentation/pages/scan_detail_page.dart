@@ -6,9 +6,12 @@ import '../../../../core/settings/settings_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../shared/widgets/app_widgets.dart';
+import '../../../live_scan/presentation/widgets/field3d_widget.dart';
 import '../../../live_scan/presentation/widgets/field_map_widget.dart';
 
-class ScanDetailPage extends ConsumerWidget {
+enum _DetailView { twoD, threeD }
+
+class ScanDetailPage extends ConsumerStatefulWidget {
   final String title;
   final DateTime date;
   final int rows;
@@ -29,10 +32,20 @@ class ScanDetailPage extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ScanDetailPage> createState() => _ScanDetailPageState();
+}
+
+class _ScanDetailPageState extends ConsumerState<ScanDetailPage> {
+  _DetailView _view = _DetailView.twoD;
+
+  @override
+  Widget build(BuildContext context) {
     final locale = ref.watch(localeProvider);
-    final complete = status == 'Complete';
-    final hasData = measurements != null && measurements!.isNotEmpty && rows > 0 && columns > 0;
+    final complete = widget.status == 'Complete';
+    final hasData = widget.measurements != null &&
+        widget.measurements!.isNotEmpty &&
+        widget.rows > 0 &&
+        widget.columns > 0;
 
     return Scaffold(
       appBar: AppBar(title: Text(Strings.tr(locale, 'scanDetails'))),
@@ -48,7 +61,7 @@ class ScanDetailPage extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Text(title, style: AppTextStyles.headline)),
+                        Expanded(child: Text(widget.title, style: AppTextStyles.headline)),
                         StatusPill(
                           label: complete
                               ? Strings.tr(locale, 'complete')
@@ -58,25 +71,38 @@ class ScanDetailPage extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('${Strings.tr(locale, 'date')}: ${_fmtDate(date)}', style: AppTextStyles.caption),
-                    Text('${Strings.tr(locale, 'grid')}: $rows × $columns', style: AppTextStyles.caption),
-                    Text('${Strings.tr(locale, 'points')}: $points', style: AppTextStyles.caption),
+                    Text('${Strings.tr(locale, 'date')}: ${_fmtDate(widget.date)}', style: AppTextStyles.caption),
+                    Text('${Strings.tr(locale, 'grid')}: ${widget.rows} × ${widget.columns}', style: AppTextStyles.caption),
+                    Text('${Strings.tr(locale, 'points')}: ${widget.points}', style: AppTextStyles.caption),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              SectionHeader(
-                title: Strings.tr(locale, 'savedHeatmap'),
-                subtitle: Strings.tr(locale, 'savedHeatmapSub'),
+              Row(
+                children: [
+                  Expanded(
+                    child: SectionHeader(
+                      title: Strings.tr(locale, 'savedHeatmap'),
+                      subtitle: Strings.tr(locale, 'savedHeatmapSub'),
+                    ),
+                  ),
+                  if (hasData)
+                    SegmentedButton<_DetailView>(
+                      segments: const [
+                        ButtonSegment(value: _DetailView.twoD, label: Text('2D')),
+                        ButtonSegment(value: _DetailView.threeD, label: Text('3D')),
+                      ],
+                      selected: {_view},
+                      onSelectionChanged: (s) => setState(() => _view = s.first),
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               AppCard(
                 child: hasData
-                    ? FieldMapWidget(
-                        rows: rows,
-                        columns: columns,
-                        measurements: measurements!,
-                      )
+                    ? _buildMap()
                     : EmptyState(
                         icon: Icons.grid_off,
                         title: Strings.tr(locale, 'noGridData'),
@@ -87,6 +113,22 @@ class ScanDetailPage extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMap() {
+    final measurements = widget.measurements!;
+    if (_view == _DetailView.threeD) {
+      return Field3DWidget(
+        rows: widget.rows,
+        columns: widget.columns,
+        measurements: measurements,
+      );
+    }
+    return FieldMapWidget(
+      rows: widget.rows,
+      columns: widget.columns,
+      measurements: measurements,
     );
   }
 

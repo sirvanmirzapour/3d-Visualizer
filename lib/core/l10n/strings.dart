@@ -2,7 +2,7 @@ enum AppLocale { en, fa }
 
 class Strings {
   static const Map<String, String> en = {
-    'appName': 'Magnetic Scanner',
+    'appName': 'Visualizer 3D',
     'settings': 'Settings',
     'dashboard': 'Dashboard',
     'subtitle': 'Scientific magnetic field scanning workspace',
@@ -157,7 +157,7 @@ class Strings {
   };
 
   static const Map<String, String> fa = {
-    'appName': 'اسکنر مغناطیسی',
+    'appName': 'ویژوالایزر سه‌بعدی',
     'settings': 'تنظیمات',
     'dashboard': 'داشبورد',
     'subtitle': 'محیط کاری اسکن میدان مغناطیسی',

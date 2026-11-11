@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/strings.dart';
+import '../../core/navigation/nav_controller.dart';
 import '../../core/settings/settings_controller.dart';
 import '../../features/bluetooth/presentation/pages/bluetooth_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -69,8 +70,6 @@ class MainNavigationShell extends ConsumerStatefulWidget {
 }
 
 class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
-  int _index = 0;
-
   final _pages = const [
     DashboardPage(),
     LiveScanPage.embedded(),
@@ -81,15 +80,17 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
   @override
   Widget build(BuildContext context) {
     final locale = ref.watch(localeProvider);
+    final index = ref.watch(navControllerProvider);
 
     return Scaffold(
       body: IndexedStack(
-        index: _index,
+        index: index,
         children: _pages,
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        selectedIndex: index,
+        onDestinationSelected: (i) =>
+            ref.read(navControllerProvider.notifier).goTo(i),
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.dashboard_outlined),

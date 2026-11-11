@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'core/settings/auto_connect_bootstrap.dart';
 import 'core/settings/settings_controller.dart';
 import 'core/theme/app_theme.dart';
 
@@ -17,13 +18,19 @@ class MagneticFieldScannerApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp(
-      title: 'Magnetic Scanner',
+      title: 'Visualizer 3D',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode == AppThemeMode.light ? ThemeMode.light : ThemeMode.dark,
       onGenerateRoute: AppRouter.onGenerateRoute,
       initialRoute: AppRoutes.root,
+      builder: (context, child) => Stack(
+        children: [
+          child ?? const SizedBox.shrink(),
+          const AutoConnectBootstrap(),
+        ],
+      ),
     );
   }
 }

@@ -737,7 +737,7 @@ class _DebugMonitor extends ConsumerWidget {
           Row(
             children: [
               Expanded(
-                child: Text(Strings.tr(locale, 'recentEvents'), style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+                child: Text(Strings.tr(locale, 'recentEvents'), style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
               ),
               Text(Strings.tr(locale, 'newestFirst'), style: AppTextStyles.caption),
             ],

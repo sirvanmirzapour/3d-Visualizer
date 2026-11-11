@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/app.dart';
 import '../../../../core/l10n/strings.dart';
+import '../../../../core/navigation/nav_controller.dart';
 import '../../../../core/settings/settings_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../services/bluetooth/bluetooth_connection_service.dart';
 import '../../../../services/bluetooth/bluetooth_permission_service.dart';
 import '../../../../shared/widgets/app_widgets.dart';
+import '../../../bluetooth/presentation/controllers/bluetooth_connection_provider.dart';
 import '../../../bluetooth/presentation/controllers/bluetooth_permission_providers.dart';
+import '../../../scan_history/data/scan_repository.dart';
 
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
@@ -16,7 +20,9 @@ class DashboardPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final readiness = ref.watch(bluetoothReadinessProvider);
+    final conn = ref.watch(bluetoothConnectionProvider);
     final locale = ref.watch(localeProvider);
+    final scansAsync = ref.watch(savedScansProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -29,7 +35,7 @@ class DashboardPage extends ConsumerWidget {
           ),
           IconButton(
             tooltip: Strings.tr(locale, 'settings'),
-            onPressed: () => _openSettingsTab(context),
+            onPressed: () => _openSettingsTab(context, ref),
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
@@ -40,15 +46,15 @@ class DashboardPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(context, readiness, locale),
+              _buildHeader(context, readiness, conn, locale),
               const SizedBox(height: 16),
-              _buildDeviceStatusCard(context, readiness, locale),
+              _buildDeviceStatusCard(context, readiness, conn, locale),
               const SizedBox(height: 16),
               _buildStartScanCard(context, locale),
               const SizedBox(height: 16),
-              _buildLastScanCard(locale),
+              _buildLastScanCard(context, locale, scansAsync),
               const SizedBox(height: 16),
-              _buildStats(locale),
+              _buildStats(locale, scansAsync),
             ],
           ),
         ),
@@ -56,25 +62,22 @@ class DashboardPage extends ConsumerWidget {
     );
   }
 
-  void _openSettingsTab(BuildContext context) {
-    final state = context.findAncestorStateOfType<State<MainNavigationShell>>();
-    if (state != null) {
-      // ignore: invalid_use_of_protected_member
-      (state as dynamic).setState(() {
-        (state as dynamic)._index = 3;
-      });
-    }
+  void _openSettingsTab(BuildContext context, WidgetRef ref) {
+    ref.read(navControllerProvider.notifier).goTo(3);
   }
 
   Widget _buildHeader(
     BuildContext context,
     AsyncValue<BluetoothPermissionState> readiness,
+    BluetoothConnectionState conn,
     AppLocale locale,
   ) {
     final status = readiness.asData?.value;
-    final label = _headerStatus(status, locale);
-    final color = _headerColor(status);
-    const icon = Icons.link_off;
+    final label = _headerStatus(status, conn, locale);
+    final color = _headerColor(status, conn);
+    final icon = conn.status == BluetoothServiceStatus.connected
+        ? Icons.bluetooth_connected
+        : Icons.link_off;
     return AppCard(
       child: Row(
         children: [
@@ -106,7 +109,13 @@ class DashboardPage extends ConsumerWidget {
     );
   }
 
-  String _headerStatus(BluetoothPermissionState? state, AppLocale locale) {
+  String _headerStatus(
+    BluetoothPermissionState? state,
+    BluetoothConnectionState conn,
+    AppLocale locale,
+  ) {
+    if (conn.status == BluetoothServiceStatus.connected) return Strings.tr(locale, 'connected');
+    if (conn.status == BluetoothServiceStatus.error) return Strings.tr(locale, 'error');
     if (state == null) return Strings.tr(locale, 'scanning');
     if (!state.supported) return Strings.tr(locale, 'error');
     if (!state.enabled) return '${Strings.tr(locale, 'bluetoothStatus')} Off';
@@ -114,7 +123,9 @@ class DashboardPage extends ConsumerWidget {
     return Strings.tr(locale, 'disconnected');
   }
 
-  Color _headerColor(BluetoothPermissionState? state) {
+  Color _headerColor(BluetoothPermissionState? state, BluetoothConnectionState conn) {
+    if (conn.status == BluetoothServiceStatus.connected) return AppColors.success;
+    if (conn.status == BluetoothServiceStatus.error) return AppColors.error;
     if (state == null) return AppColors.textSecondary;
     if (!state.supported) return AppColors.error;
     if (state.canScan) return AppColors.error;
@@ -124,9 +135,18 @@ class DashboardPage extends ConsumerWidget {
   Widget _buildDeviceStatusCard(
     BuildContext context,
     AsyncValue<BluetoothPermissionState> readiness,
+    BluetoothConnectionState conn,
     AppLocale locale,
   ) {
     final state = readiness.asData?.value;
+    final deviceName = conn.status == BluetoothServiceStatus.connected ||
+            conn.deviceName != null
+        ? (conn.deviceName ?? '—')
+        : Strings.tr(locale, 'noDeviceSelected');
+    final connLabel = _connLabel(conn.status, locale);
+    final connColor = _connColor(conn.status);
+    final lastVal = conn.measurements.isEmpty ? '—' : conn.measurements.last.toString();
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -134,12 +154,15 @@ class DashboardPage extends ConsumerWidget {
           SectionHeader(
             title: Strings.tr(locale, 'deviceStatus'),
             subtitle: Strings.tr(locale, 'deviceStatusSub'),
+            trailing: StatusPill(label: connLabel, color: connColor),
           ),
           const SizedBox(height: 14),
           _infoRow(Strings.tr(locale, 'bluetoothStatus'), _btStatus(state, readiness, locale)),
-          _infoRow(Strings.tr(locale, 'deviceName'), Strings.tr(locale, 'noDeviceSelected')),
-          _infoRow(Strings.tr(locale, 'connectionStatus'), Strings.tr(locale, 'disconnected')),
-          _infoRow(Strings.tr(locale, 'lastMeasurement'), '—'),
+          _infoRow(Strings.tr(locale, 'deviceName'), deviceName),
+          if (conn.status == BluetoothServiceStatus.connected)
+            _infoRow(Strings.tr(locale, 'macAddress'), conn.deviceAddress ?? '—'),
+          _infoRow(Strings.tr(locale, 'connectionStatus'), connLabel),
+          _infoRow(Strings.tr(locale, 'lastMeasurement'), lastVal),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerLeft,
@@ -152,6 +175,35 @@ class DashboardPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _connLabel(BluetoothServiceStatus s, AppLocale locale) {
+    switch (s) {
+      case BluetoothServiceStatus.connected:
+        return Strings.tr(locale, 'connected');
+      case BluetoothServiceStatus.connecting:
+        return Strings.tr(locale, 'connecting');
+      case BluetoothServiceStatus.disconnecting:
+        return Strings.tr(locale, 'disconnecting');
+      case BluetoothServiceStatus.error:
+        return Strings.tr(locale, 'error');
+      case BluetoothServiceStatus.disconnected:
+        return Strings.tr(locale, 'disconnected');
+    }
+  }
+
+  Color _connColor(BluetoothServiceStatus s) {
+    switch (s) {
+      case BluetoothServiceStatus.connected:
+        return AppColors.success;
+      case BluetoothServiceStatus.connecting:
+      case BluetoothServiceStatus.disconnecting:
+        return AppColors.warning;
+      case BluetoothServiceStatus.error:
+        return AppColors.error;
+      case BluetoothServiceStatus.disconnected:
+        return AppColors.textSecondary;
+    }
   }
 
   String _btStatus(
@@ -248,7 +300,14 @@ class DashboardPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildLastScanCard(AppLocale locale) {
+  Widget _buildLastScanCard(
+    BuildContext context,
+    AppLocale locale,
+    AsyncValue<List<ScanRecord>> scansAsync,
+  ) {
+    final scans = scansAsync.valueOrNull;
+    final last = (scans == null || scans.isEmpty) ? null : scans.first;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -257,16 +316,49 @@ class DashboardPage extends ConsumerWidget {
           subtitle: Strings.tr(locale, 'lastScanSub'),
         ),
         const SizedBox(height: 10),
-        EmptyState(
-          icon: Icons.history_toggle_off,
-          title: Strings.tr(locale, 'noPreviousScans'),
-          message: Strings.tr(locale, 'noPreviousScansMsg'),
-        ),
+        if (last == null)
+          EmptyState(
+            icon: Icons.history_toggle_off,
+            title: Strings.tr(locale, 'noPreviousScans'),
+            message: Strings.tr(locale, 'noPreviousScansMsg'),
+          )
+        else
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => Navigator.pushNamed(
+              context,
+              AppRoutes.scanDetail,
+              arguments: {
+                'title': 'Scan ${scans!.length}',
+                'date': last.createdAt,
+                'rows': last.rows,
+                'columns': last.columns,
+                'points': last.points,
+                'status': last.complete ? 'Complete' : 'Incomplete',
+                'measurements': last.measurements,
+              },
+            ),
+            child: AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${last.rows}×${last.columns} • ${last.points} ${Strings.tr(locale, 'points')}', style: AppTextStyles.title.copyWith(fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text(_fmtDate(last.createdAt), style: AppTextStyles.caption),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildStats(AppLocale locale) {
+  Widget _buildStats(AppLocale locale, AsyncValue<List<ScanRecord>> scansAsync) {
+    final scans = scansAsync.valueOrNull ?? const <ScanRecord>[];
+    final total = scans.length;
+    final completed = scans.where((s) => s.complete).length;
+    final incomplete = total - completed;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -280,7 +372,7 @@ class DashboardPage extends ConsumerWidget {
             Expanded(
               child: MetricTile(
                 label: Strings.tr(locale, 'totalScans'),
-                value: '0',
+                value: '$total',
                 icon: Icons.layers_outlined,
                 accent: AppColors.primary,
               ),
@@ -289,7 +381,7 @@ class DashboardPage extends ConsumerWidget {
             Expanded(
               child: MetricTile(
                 label: Strings.tr(locale, 'completed'),
-                value: '0',
+                value: '$completed',
                 icon: Icons.check_circle_outline,
                 accent: AppColors.success,
               ),
@@ -299,11 +391,17 @@ class DashboardPage extends ConsumerWidget {
         const SizedBox(height: 12),
         MetricTile(
           label: Strings.tr(locale, 'incompleteScans'),
-          value: '0',
+          value: '$incomplete',
           icon: Icons.timelapse,
           accent: AppColors.warning,
         ),
       ],
     );
+  }
+
+  String _fmtDate(DateTime t) {
+    final l = t.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(l.year)}/${two(l.month)}/${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
   }
 }

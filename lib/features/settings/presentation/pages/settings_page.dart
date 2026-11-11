@@ -99,7 +99,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.bluetooth_connected, color: AppColors.primary),
                     title: Text(Strings.tr(locale, 'lastConnectedDevice'), style: AppTextStyles.body),
-                    subtitle: Text(Strings.tr(locale, 'none'), style: AppTextStyles.caption),
+                    subtitle: Text(
+                      settings.lastDeviceName ?? Strings.tr(locale, 'none'),
+                      style: AppTextStyles.caption,
+                    ),
                   ),
                   const Divider(height: 20),
                   SwitchListTile(
@@ -107,8 +110,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     secondary: const Icon(Icons.sync, color: AppColors.primary),
                     title: Text(Strings.tr(locale, 'autoConnect'), style: AppTextStyles.body),
                     subtitle: Text(Strings.tr(locale, 'autoConnectSub'), style: AppTextStyles.caption),
-                    value: false,
-                    onChanged: (_) {},
+                    value: settings.autoConnect,
+                    onChanged: (v) => controller.setAutoConnect(v),
                   ),
                 ],
               ),
