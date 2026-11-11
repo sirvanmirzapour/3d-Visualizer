@@ -160,9 +160,29 @@ class Field3DPainter extends CustomPainter {
       return Offset(cx + x2 * scale, cy - y1 * scale);
     }
 
-    double heightAt(int r, int c) {
-      if (r < 0 || c < 0 || r >= rows || c >= columns) return 0;
-      return _norm(r * columns + c, minV, maxV) * 2.2;
+    // Smooth, high-resolution sampling via inverse-distance interpolation so the
+    // surface is rendered with many small quads instead of one big square per cell.
+    double sampleAt(double gx, double gy) {
+      const eps = 1e-4;
+      const radius = 2.2;
+      final rowLo = (gy - radius).floor().clamp(0, rows - 1);
+      final rowHi = (gy + radius).ceil().clamp(0, rows - 1);
+      final colLo = (gx - radius).floor().clamp(0, columns - 1);
+      final colHi = (gx + radius).ceil().clamp(0, columns - 1);
+      double sw = 0;
+      double sv = 0;
+      for (var r = rowLo; r <= rowHi; r++) {
+        final dy = gy - (r + 0.5);
+        for (var c = colLo; c <= colHi; c++) {
+          final i = r * columns + c;
+          if (i >= measurements.length) continue;
+          final dx = gx - (c + 0.5);
+          final w = 1.0 / (dx * dx + dy * dy + eps);
+          sw += w;
+          sv += w * _norm(i, minV, maxV);
+        }
+      }
+      return sw > 0 ? sv / sw : 0;
     }
 
     // ---- base grid plane ----------------------------------------------------
@@ -188,26 +208,31 @@ class Field3DPainter extends CustomPainter {
 
     if (measurements.isEmpty) return;
 
-    // ---- vertical stem lines + surface quads --------------------------------
-    final stemPaint = Paint()
-      ..color = const Color(0xFF4B5563)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
+    // ---- high-resolution subdivided surface ----------------------------------
+    // Use a target subdivision so each tile is small regardless of grid size.
+    final subTarget = 72;
+    final subCols = columns > 2 ? subTarget.clamp(16, 100) : columns;
+    final subRows = rows > 2
+        ? subTarget.clamp(16, 100)
+        : rows;
 
     final quads = <({double depth, Path path, Color color})>[];
-    for (var r = 0; r < rows - 1; r++) {
-      for (var c = 0; c < columns - 1; c++) {
-        final i = r * columns + c;
-        if (i >= measurements.length) continue;
-        final z00 = heightAt(r, c);
-        final z10 = heightAt(r, c + 1);
-        final z11 = heightAt(r + 1, c + 1);
-        final z01 = heightAt(r + 1, c);
+    for (var r = 0; r < subRows - 1; r++) {
+      final gy0 = (r / (subRows - 1)) * (rows - 1);
+      final gy1 = ((r + 1) / (subRows - 1)) * (rows - 1);
+      for (var c = 0; c < subCols - 1; c++) {
+        final gx0 = (c / (subCols - 1)) * (columns - 1);
+        final gx1 = ((c + 1) / (subCols - 1)) * (columns - 1);
 
-        final p00 = project(c.toDouble(), r.toDouble(), z00);
-        final p10 = project((c + 1).toDouble(), r.toDouble(), z10);
-        final p11 = project((c + 1).toDouble(), (r + 1).toDouble(), z11);
-        final p01 = project(c.toDouble(), (r + 1).toDouble(), z01);
+        final z00 = sampleAt(gx0, gy0) * 2.2;
+        final z10 = sampleAt(gx1, gy0) * 2.2;
+        final z11 = sampleAt(gx1, gy1) * 2.2;
+        final z01 = sampleAt(gx0, gy1) * 2.2;
+
+        final p00 = project(gx0, gy0, z00);
+        final p10 = project(gx1, gy0, z10);
+        final p11 = project(gx1, gy1, z11);
+        final p01 = project(gx0, gy1, z01);
 
         final t = (z00 + z10 + z11 + z01) / 8.8;
         final depth = (p00.dy + p10.dy + p11.dy + p01.dy) / 4.0;
@@ -225,25 +250,10 @@ class Field3DPainter extends CustomPainter {
 
     quads.sort((a, b) => a.depth.compareTo(b.depth));
 
-    // draw stem lines first (behind surface)
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < columns; c++) {
-        final i = r * columns + c;
-        if (i >= measurements.length) continue;
-        final z = heightAt(r, c);
-        if (z <= 0.001) continue;
-        canvas.drawLine(
-          project(c.toDouble(), r.toDouble(), 0),
-          project(c.toDouble(), r.toDouble(), z),
-          stemPaint,
-        );
-      }
-    }
-
     final wire = Paint()
-      ..color = const Color(0x99334155)
+      ..color = const Color(0x55FFFFFF)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
+      ..strokeWidth = 0.5;
 
     for (final q in quads) {
       canvas.drawPath(q.path, Paint()..color = q.color);
