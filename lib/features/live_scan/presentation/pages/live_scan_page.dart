@@ -11,6 +11,7 @@ import '../../../../services/bluetooth/bluetooth_connection_service.dart';
 import '../../../../shared/widgets/app_widgets.dart';
 import '../../../bluetooth/presentation/controllers/bluetooth_connection_provider.dart';
 import '../../../scan_history/data/scan_repository.dart';
+import '../widgets/field3d_widget.dart';
 import '../widgets/field_map_widget.dart';
 import '../widgets/heatmap_widget.dart';
 
@@ -119,21 +120,24 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_mode == HeatmapMode.smooth)
-                    FieldMapWidget(
-                      rows: widget.rows,
-                      columns: widget.columns,
-                      measurements: measurements,
-                    )
-                  else
-                    AspectRatio(
-                      aspectRatio: widget.columns / widget.rows,
-                      child: HeatmapWidget(
-                        rows: widget.rows,
-                        columns: widget.columns,
-                        values: measurements,
+                  Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: _openFullscreen,
+                        behavior: HitTestBehavior.opaque,
+                        child: _buildMap(measurements),
                       ),
-                    ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: IconButton.filledTonal(
+                          tooltip: 'Fullscreen',
+                          onPressed: _openFullscreen,
+                          icon: const Icon(Icons.fullscreen),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     'Pinch to zoom and drag to inspect the grid.',
@@ -161,6 +165,39 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
     return Scaffold(
       appBar: AppBar(title: Text(Strings.tr(locale, 'liveScan'))),
       body: content,
+    );
+  }
+
+  Widget _buildMap(List<num> measurements) {
+    if (_mode == HeatmapMode.smooth) {
+      return FieldMapWidget(
+        rows: widget.rows,
+        columns: widget.columns,
+        measurements: measurements,
+      );
+    }
+    return AspectRatio(
+      aspectRatio: widget.columns / widget.rows,
+      child: HeatmapWidget(
+        rows: widget.rows,
+        columns: widget.columns,
+        values: measurements,
+      ),
+    );
+  }
+
+  void _openFullscreen() {
+    final measurements = ref.read(bluetoothConnectionProvider).measurements;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _FullscreenMap(
+          rows: widget.rows,
+          columns: widget.columns,
+          measurements: measurements,
+          mode: _mode,
+        ),
+      ),
     );
   }
 
@@ -352,6 +389,92 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
           Expanded(child: Text(label, style: AppTextStyles.caption)),
           Text(value, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
         ],
+      ),
+    );
+  }
+}
+
+enum _FSView { twoD, threeD }
+
+class _FullscreenMap extends StatefulWidget {
+  final int rows;
+  final int columns;
+  final List<num> measurements;
+  final HeatmapMode mode;
+
+  const _FullscreenMap({
+    required this.rows,
+    required this.columns,
+    required this.measurements,
+    required this.mode,
+  });
+
+  @override
+  State<_FullscreenMap> createState() => _FullscreenMapState();
+}
+
+class _FullscreenMapState extends State<_FullscreenMap> {
+  _FSView _view = _FSView.twoD;
+
+  Widget _buildContent() {
+    if (_view == _FSView.threeD) {
+      return Field3DWidget(
+        rows: widget.rows,
+        columns: widget.columns,
+        measurements: widget.measurements,
+      );
+    }
+    if (widget.mode == HeatmapMode.smooth) {
+      return FieldMapWidget(
+        rows: widget.rows,
+        columns: widget.columns,
+        measurements: widget.measurements,
+      );
+    }
+    return AspectRatio(
+      aspectRatio: widget.columns / widget.rows,
+      child: HeatmapWidget(
+        rows: widget.rows,
+        columns: widget.columns,
+        values: widget.measurements,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(leading: const BackButton()),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              SegmentedButton<_FSView>(
+                segments: const [
+                  ButtonSegment(value: _FSView.twoD, label: Text('2D')),
+                  ButtonSegment(value: _FSView.threeD, label: Text('3D')),
+                ],
+                selected: {_view},
+                onSelectionChanged: (s) => setState(() => _view = s.first),
+                showSelectedIcon: false,
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: Center(
+                      child: SizedBox(
+                        width: constraints.maxWidth,
+                        child: _buildContent(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

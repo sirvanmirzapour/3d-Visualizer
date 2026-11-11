@@ -32,15 +32,18 @@ class HeatmapGridPainter extends CustomPainter {
       }
     }
 
+    final fontSize = (cellW < cellH ? cellW : cellH) * 0.42;
+
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < columns; c++) {
         final index = r * columns + c;
         final rect = Rect.fromLTWH(c * cellW, r * cellH, cellW, cellH);
 
         Color fill = _lowColor;
+        double t = 0;
         if (vals != null && index < vals.length) {
           final v = vals[index].toDouble();
-          double t = 0.5;
+          t = 0.5;
           if (minV != null && maxV != null && maxV > minV) {
             t = ((v - minV) / (maxV - minV)).clamp(0.0, 1.0);
           }
@@ -49,8 +52,33 @@ class HeatmapGridPainter extends CustomPainter {
 
         canvas.drawRect(rect, Paint()..color = fill);
         canvas.drawRect(rect, stroke);
+
+        if (vals != null && index < vals.length) {
+          final textColor =
+              fill.computeLuminance() > 0.4 ? const Color(0xFF0B1026) : const Color(0xFFF8FAFC);
+          final tp = TextPainter(
+            text: TextSpan(
+              text: _fmt(vals[index]),
+              style: TextStyle(
+                color: textColor,
+                fontSize: fontSize.clamp(7.0, 14.0),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          tp.paint(
+            canvas,
+            Offset(rect.center.dx - tp.width / 2, rect.center.dy - tp.height / 2),
+          );
+        }
       }
     }
+  }
+
+  String _fmt(num v) {
+    final s = v.toStringAsFixed(2);
+    return s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
   }
 
   @override

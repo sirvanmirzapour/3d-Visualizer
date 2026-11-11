@@ -7,12 +7,14 @@ class FieldMapWidget extends StatefulWidget {
   final int rows;
   final int columns;
   final List<num> measurements;
+  final bool showValues;
 
   const FieldMapWidget({
     super.key,
     required this.rows,
     required this.columns,
     required this.measurements,
+    this.showValues = true,
   });
 
   @override
@@ -30,6 +32,7 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
   ];
 
   ui.Image? _image;
+  List<num> _samples = const [];
   double _min = 0;
   double _max = 1;
 
@@ -53,6 +56,7 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
     final rows = widget.rows;
     final cols = widget.columns;
     final samples = widget.measurements.take(rows * cols).toList();
+    _samples = samples;
     if (samples.length < 2) {
       setState(() => _image = null);
       return;
@@ -69,26 +73,39 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
     _min = mn;
     _max = mx;
 
-    const outW = 180;
-    final outH = (outW * rows / cols).round().clamp(40, 480);
+    const outW = 320;
+    final outH = (outW * rows / cols).round().clamp(40, 560);
 
     final data = ByteData(outW * outH * 4);
-    const eps = 1e-3;
+    const eps = 1e-4;
+    const radius = 2.5;
+    final maxRow = rows - 1;
+    final maxCol = cols - 1;
+
     for (var y = 0; y < outH; y++) {
       final gy = (y / outH) * rows;
+      final rowLo = (gy - radius).floor().clamp(0, maxRow);
+      final rowHi = (gy + radius).ceil().clamp(0, maxRow);
       for (var x = 0; x < outW; x++) {
         final gx = (x / outW) * cols;
+        final colLo = (gx - radius).floor().clamp(0, maxCol);
+        final colHi = (gx + radius).ceil().clamp(0, maxCol);
+
         double sw = 0;
         double sv = 0;
-        for (var i = 0; i < samples.length; i++) {
-          final r = (i ~/ cols) + 0.5;
-          final c = (i % cols) + 0.5;
-          final dx = gx - c;
-          final dy = gy - r;
-          final w = 1.0 / (dx * dx + dy * dy + eps);
-          sw += w;
-          sv += w * samples[i].toDouble();
+        for (var r = rowLo; r <= rowHi; r++) {
+          final cy = r + 0.5;
+          final dy = gy - cy;
+          for (var c = colLo; c <= colHi; c++) {
+            final i = r * cols + c;
+            if (i >= samples.length) continue;
+            final dx = gx - (c + 0.5);
+            final w = 1.0 / (dx * dx + dy * dy + eps);
+            sw += w;
+            sv += w * samples[i].toDouble();
+          }
         }
+
         final norm = sw > 0 ? sv / sw : mn;
         final t = ((norm - mn) / span).clamp(0.0, 1.0);
         final color = _colorFor(t.toDouble());
@@ -162,7 +179,22 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
                   border: Border.all(color: const Color(0xFF334155)),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: RawImage(image: _image, fit: BoxFit.fill),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RawImage(image: _image, fit: BoxFit.fill),
+                    if (widget.showValues && _samples.isNotEmpty)
+                      CustomPaint(
+                        painter: _ValueOverlayPainter(
+                          rows: widget.rows,
+                          cols: widget.columns,
+                          measurements: _samples,
+                          minV: _min,
+                          maxV: _max,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -203,4 +235,62 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
     fontSize: 12,
     fontWeight: FontWeight.w600,
   );
+}
+
+class _ValueOverlayPainter extends CustomPainter {
+  final int rows;
+  final int cols;
+  final List<num> measurements;
+  final double minV;
+  final double maxV;
+
+  _ValueOverlayPainter({
+    required this.rows,
+    required this.cols,
+    required this.measurements,
+    required this.minV,
+    required this.maxV,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (measurements.isEmpty) return;
+    final cellW = size.width / cols;
+    final cellH = size.height / rows;
+    final fontSize = (cellW < cellH ? cellW : cellH) * 0.42;
+
+    for (var i = 0; i < measurements.length; i++) {
+      final r = i ~/ cols;
+      final c = i % cols;
+      final x = (c + 0.5) * cellW;
+      final y = (r + 0.5) * cellH;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: _fmt(measurements[i]),
+          style: TextStyle(
+            color: const Color(0xFFFFFFFF),
+            fontSize: fontSize.clamp(7.0, 16.0),
+            fontWeight: FontWeight.w700,
+            shadows: const [
+              Shadow(color: Color(0xFF000000), blurRadius: 3, offset: Offset(1, 1)),
+            ],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x - tp.width / 2, y - tp.height / 2));
+    }
+  }
+
+  String _fmt(num v) {
+    final s = v.toStringAsFixed(2);
+    return s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  @override
+  bool shouldRepaint(covariant _ValueOverlayPainter oldDelegate) {
+    return oldDelegate.measurements != measurements ||
+        oldDelegate.rows != rows ||
+        oldDelegate.cols != cols;
+  }
 }
