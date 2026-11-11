@@ -2,9 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// A lightweight pseudo-3D surface view of the measured field, drawn with a
-/// CustomPainter (no extra dependencies). Heights are the normalized values.
-class Field3DWidget extends StatelessWidget {
+import '../painters/heat_palette.dart';
+
+/// Professional-looking interactive 3D field view.
+///
+/// Gestures are handled manually (no InteractiveViewer) to avoid conflicts:
+///  - drag -> rotate the surface
+///  - pinch -> zoom
+class Field3DWidget extends StatefulWidget {
   final int rows;
   final int columns;
   final List<num> measurements;
@@ -17,26 +22,65 @@ class Field3DWidget extends StatelessWidget {
   });
 
   @override
+  State<Field3DWidget> createState() => _Field3DWidgetState();
+}
+
+class _Field3DWidgetState extends State<Field3DWidget> {
+  double _rx = -0.9;
+  double _ry = -0.6;
+  double _zoom = 1;
+  double _baseZoom = 1;
+  Offset? _lastFocal;
+
+  void _onScaleStart(ScaleStartDetails d) {
+    _baseZoom = _zoom;
+    _lastFocal = d.focalPoint;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    final last = _lastFocal;
+    if (last != null) {
+      final dx = d.focalPoint.dx - last.dx;
+      final dy = d.focalPoint.dy - last.dy;
+      setState(() {
+        _ry += dx * 0.008;
+        _rx += dy * 0.008;
+      });
+    }
+    _lastFocal = d.focalPoint;
+    setState(() {
+      _zoom = (_baseZoom * d.scale).clamp(0.5, 8.0);
+    });
+  }
+
+  void _onScaleEnd(ScaleEndDetails d) {
+    _lastFocal = null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 1,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: InteractiveViewer(
-          minScale: 1,
-          maxScale: 10,
-          boundaryMargin: const EdgeInsets.all(24),
+        child: GestureDetector(
+          onScaleStart: _onScaleStart,
+          onScaleUpdate: _onScaleUpdate,
+          onScaleEnd: _onScaleEnd,
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF101319),
+              color: const Color(0xFF0A0F1C),
               border: Border.all(color: const Color(0xFF334155)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: CustomPaint(
               painter: Field3DPainter(
-                rows: rows,
-                columns: columns,
-                measurements: measurements,
+                rows: widget.rows,
+                columns: widget.columns,
+                measurements: widget.measurements,
+                rx: _rx,
+                ry: _ry,
+                zoom: _zoom,
               ),
               child: const SizedBox.expand(),
             ),
@@ -51,16 +95,18 @@ class Field3DPainter extends CustomPainter {
   final int rows;
   final int columns;
   final List<num> measurements;
+  final double rx;
+  final double ry;
+  final double zoom;
 
-  Field3DPainter({required this.rows, required this.columns, required this.measurements});
-
-  static const List<Color> _colors = [
-    Color(0xFF0B1026),
-    Color(0xFF22D3EE),
-    Color(0xFF34D399),
-    Color(0xFFFACC15),
-    Color(0xFFEF4444),
-  ];
+  Field3DPainter({
+    required this.rows,
+    required this.columns,
+    required this.measurements,
+    required this.rx,
+    required this.ry,
+    required this.zoom,
+  });
 
   double _norm(int index, double minV, double maxV) {
     if (index >= measurements.length) return 0;
@@ -69,38 +115,37 @@ class Field3DPainter extends CustomPainter {
     return ((v - minV) / span).clamp(0.0, 1.0);
   }
 
-  Color _colorFor(double t) {
-    if (t <= 0) return _colors.first;
-    if (t >= 1) return _colors.last;
-    const stops = [0.0, 0.25, 0.5, 0.75, 1.0];
-    for (var i = 0; i < stops.length - 1; i++) {
-      if (t >= stops[i] && t <= stops[i + 1]) {
-        final f = (t - stops[i]) / (stops[i + 1] - stops[i]);
-        return Color.lerp(_colors[i], _colors[i + 1], f)!;
-      }
-    }
-    return _colors.last;
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
-    if (rows <= 0 || columns <= 0 || measurements.isEmpty) return;
+    if (rows <= 0 || columns <= 0) return;
 
-    double minV = measurements.first.toDouble();
-    double maxV = measurements.first.toDouble();
-    for (final v in measurements) {
-      final d = v.toDouble();
-      if (d < minV) minV = d;
-      if (d > maxV) maxV = d;
+    // ---- background vignette ------------------------------------------------
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..shader = const RadialGradient(
+        colors: [Color(0xFF111827), Color(0xFF0A0F1C)],
+      ).createShader(Offset.zero & size),
+    );
+
+    // ---- data range ---------------------------------------------------------
+    double minV = 0;
+    double maxV = 1;
+    if (measurements.isNotEmpty) {
+      minV = measurements.first.toDouble();
+      maxV = measurements.first.toDouble();
+      for (final v in measurements) {
+        final d = v.toDouble();
+        if (d < minV) minV = d;
+        if (d > maxV) maxV = d;
+      }
     }
 
-    final rx = -0.85;
-    final ry = -0.55;
+    // ---- projection setup ---------------------------------------------------
     final cosX = math.cos(rx);
     final sinX = math.sin(rx);
     final cosY = math.cos(ry);
     final sinY = math.sin(ry);
-    final scale = size.shortestSide * 0.34;
+    final scale = size.shortestSide * 0.34 * zoom;
     final cx = size.width / 2;
     final cy = size.height / 2;
     final h = (rows - 1) / 2;
@@ -117,10 +162,38 @@ class Field3DPainter extends CustomPainter {
 
     double heightAt(int r, int c) {
       if (r < 0 || c < 0 || r >= rows || c >= columns) return 0;
-      return _norm(r * columns + c, minV, maxV) * 2.0;
+      return _norm(r * columns + c, minV, maxV) * 2.2;
     }
 
-    // Build quads with average depth for painter's-order sorting.
+    // ---- base grid plane ----------------------------------------------------
+    final gridPaint = Paint()
+      ..color = const Color(0xFF1E293B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final axisPaint = Paint()
+      ..color = const Color(0xFF334155)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    for (var r = 0; r < rows; r++) {
+      final a = project(0, r.toDouble(), 0);
+      final b = project((columns - 1).toDouble(), r.toDouble(), 0);
+      canvas.drawLine(a, b, r == 0 || r == rows - 1 ? axisPaint : gridPaint);
+    }
+    for (var c = 0; c < columns; c++) {
+      final a = project(c.toDouble(), 0, 0);
+      final b = project(c.toDouble(), (rows - 1).toDouble(), 0);
+      canvas.drawLine(a, b, c == 0 || c == columns - 1 ? axisPaint : gridPaint);
+    }
+
+    if (measurements.isEmpty) return;
+
+    // ---- vertical stem lines + surface quads --------------------------------
+    final stemPaint = Paint()
+      ..color = const Color(0xFF4B5563)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
     final quads = <({double depth, Path path, Color color})>[];
     for (var r = 0; r < rows - 1; r++) {
       for (var c = 0; c < columns - 1; c++) {
@@ -136,7 +209,7 @@ class Field3DPainter extends CustomPainter {
         final p11 = project((c + 1).toDouble(), (r + 1).toDouble(), z11);
         final p01 = project(c.toDouble(), (r + 1).toDouble(), z01);
 
-        final t = (z00 + z10 + z11 + z01) / 8.0;
+        final t = (z00 + z10 + z11 + z01) / 8.8;
         final depth = (p00.dy + p10.dy + p11.dy + p01.dy) / 4.0;
 
         final path = Path()
@@ -146,27 +219,64 @@ class Field3DPainter extends CustomPainter {
           ..lineTo(p01.dx, p01.dy)
           ..close();
 
-        quads.add((depth: depth, path: path, color: _colorFor(t)));
+        quads.add((depth: depth, path: path, color: HeatPalette.colorFor(t)));
       }
     }
 
     quads.sort((a, b) => a.depth.compareTo(b.depth));
 
-    final stroke = Paint()
-      ..color = const Color(0x66334155)
+    // draw stem lines first (behind surface)
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < columns; c++) {
+        final i = r * columns + c;
+        if (i >= measurements.length) continue;
+        final z = heightAt(r, c);
+        if (z <= 0.001) continue;
+        canvas.drawLine(
+          project(c.toDouble(), r.toDouble(), 0),
+          project(c.toDouble(), r.toDouble(), z),
+          stemPaint,
+        );
+      }
+    }
+
+    final wire = Paint()
+      ..color = const Color(0x99334155)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
     for (final q in quads) {
       canvas.drawPath(q.path, Paint()..color = q.color);
-      canvas.drawPath(q.path, stroke);
+      canvas.drawPath(q.path, wire);
     }
+
+    // ---- scale legend -------------------------------------------------------
+    final legendPaint = Paint()
+      ..color = const Color(0xFF0B1026)
+      ..style = PaintingStyle.fill;
+    final legendRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(12, size.height - 40, size.width - 24, 28),
+      const Radius.circular(14),
+    );
+    canvas.drawRRect(legendRect, legendPaint);
+
+    final barRect = Rect.fromLTWH(24, size.height - 32, size.width - 48, 12);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(barRect, const Radius.circular(6)),
+      Paint()
+        ..shader = const LinearGradient(
+          colors: HeatPalette.colors,
+        ).createShader(barRect),
+    );
   }
 
   @override
   bool shouldRepaint(covariant Field3DPainter oldDelegate) {
     return oldDelegate.rows != rows ||
         oldDelegate.columns != columns ||
-        oldDelegate.measurements != measurements;
+        oldDelegate.measurements != measurements ||
+        oldDelegate.rx != rx ||
+        oldDelegate.ry != ry ||
+        oldDelegate.zoom != zoom;
   }
 }

@@ -39,6 +39,7 @@ class LiveScanPage extends ConsumerStatefulWidget {
 
 class _LiveScanPageState extends ConsumerState<LiveScanPage> {
   HeatmapMode _mode = HeatmapMode.smooth;
+  bool _showValues = true;
 
   void _showMsg(String msg) {
     ScaffoldMessenger.of(context)
@@ -116,6 +117,18 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
               ],
             ),
             const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.numbers, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Show values', style: AppTextStyles.body)),
+                Switch(
+                  value: _showValues,
+                  onChanged: (v) => setState(() => _showValues = v),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,6 +187,7 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
         rows: widget.rows,
         columns: widget.columns,
         measurements: measurements,
+        showValues: _showValues,
       );
     }
     return AspectRatio(
@@ -182,6 +196,7 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
         rows: widget.rows,
         columns: widget.columns,
         values: measurements,
+        showValues: _showValues,
       ),
     );
   }
@@ -196,6 +211,7 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
           columns: widget.columns,
           measurements: measurements,
           mode: _mode,
+          showValues: _showValues,
         ),
       ),
     );
@@ -401,12 +417,14 @@ class _FullscreenMap extends StatefulWidget {
   final int columns;
   final List<num> measurements;
   final HeatmapMode mode;
+  final bool showValues;
 
   const _FullscreenMap({
     required this.rows,
     required this.columns,
     required this.measurements,
     required this.mode,
+    required this.showValues,
   });
 
   @override
@@ -429,6 +447,7 @@ class _FullscreenMapState extends State<_FullscreenMap> {
         rows: widget.rows,
         columns: widget.columns,
         measurements: widget.measurements,
+        showValues: widget.showValues,
       );
     }
     return AspectRatio(
@@ -437,6 +456,7 @@ class _FullscreenMapState extends State<_FullscreenMap> {
         rows: widget.rows,
         columns: widget.columns,
         values: widget.measurements,
+        showValues: widget.showValues,
       ),
     );
   }
@@ -460,6 +480,14 @@ class _FullscreenMapState extends State<_FullscreenMap> {
                 showSelectedIcon: false,
               ),
               const SizedBox(height: 12),
+              if (_view == _FSView.threeD)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Drag to rotate • Pinch to zoom',
+                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  ),
+                ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) => SingleChildScrollView(

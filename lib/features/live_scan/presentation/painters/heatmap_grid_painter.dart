@@ -1,14 +1,19 @@
 ﻿import 'package:flutter/material.dart';
 
+import 'heat_palette.dart';
+
 class HeatmapGridPainter extends CustomPainter {
   final int rows;
   final int columns;
   final List<num>? values;
+  final bool showValues;
 
-  HeatmapGridPainter({required this.rows, required this.columns, this.values});
-
-  static const Color _lowColor = Color(0xFF191F29);
-  static const Color _highColor = Color(0xFF22D3EE);
+  HeatmapGridPainter({
+    required this.rows,
+    required this.columns,
+    this.values,
+    this.showValues = true,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -31,6 +36,7 @@ class HeatmapGridPainter extends CustomPainter {
         if (maxV == null || d > maxV) maxV = d;
       }
     }
+    final span = (minV != null && maxV != null) ? maxV - minV : 0.0;
 
     final fontSize = (cellW < cellH ? cellW : cellH) * 0.42;
 
@@ -39,21 +45,20 @@ class HeatmapGridPainter extends CustomPainter {
         final index = r * columns + c;
         final rect = Rect.fromLTWH(c * cellW, r * cellH, cellW, cellH);
 
-        Color fill = _lowColor;
-        double t = 0;
+        Color fill = HeatPalette.colors.first;
         if (vals != null && index < vals.length) {
           final v = vals[index].toDouble();
-          t = 0.5;
-          if (minV != null && maxV != null && maxV > minV) {
-            t = ((v - minV) / (maxV - minV)).clamp(0.0, 1.0);
+          var t = 0.0;
+          if (span > 1e-9) {
+            t = ((v - minV!) / span).clamp(0.0, 1.0);
           }
-          fill = Color.lerp(_lowColor, _highColor, t)!;
+          fill = HeatPalette.colorFor(t);
         }
 
         canvas.drawRect(rect, Paint()..color = fill);
         canvas.drawRect(rect, stroke);
 
-        if (vals != null && index < vals.length) {
+        if (vals != null && index < vals.length && showValues) {
           final textColor =
               fill.computeLuminance() > 0.4 ? const Color(0xFF0B1026) : const Color(0xFFF8FAFC);
           final tp = TextPainter(
@@ -85,6 +90,7 @@ class HeatmapGridPainter extends CustomPainter {
   bool shouldRepaint(covariant HeatmapGridPainter oldDelegate) {
     return oldDelegate.rows != rows ||
         oldDelegate.columns != columns ||
-        oldDelegate.values != values;
+        oldDelegate.values != values ||
+        oldDelegate.showValues != showValues;
   }
 }

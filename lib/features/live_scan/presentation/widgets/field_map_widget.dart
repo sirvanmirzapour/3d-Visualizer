@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../painters/heat_palette.dart';
+
 class FieldMapWidget extends StatefulWidget {
   final int rows;
   final int columns;
@@ -22,15 +24,6 @@ class FieldMapWidget extends StatefulWidget {
 }
 
 class _FieldMapWidgetState extends State<FieldMapWidget> {
-  static const List<double> _stops = [0.0, 0.25, 0.5, 0.75, 1.0];
-  static const List<Color> _colors = [
-    Color(0xFF0B1026),
-    Color(0xFF22D3EE),
-    Color(0xFF34D399),
-    Color(0xFFFACC15),
-    Color(0xFFEF4444),
-  ];
-
   ui.Image? _image;
   List<num> _samples = const [];
   double _min = 0;
@@ -108,7 +101,7 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
 
         final norm = sw > 0 ? sv / sw : mn;
         final t = ((norm - mn) / span).clamp(0.0, 1.0);
-        final color = _colorFor(t.toDouble());
+        final color = HeatPalette.colorFor(t.toDouble());
         final o = (y * outW + x) * 4;
         data.setUint8(o, (color.r * 255).round().clamp(0, 255).toInt());
         data.setUint8(o + 1, (color.g * 255).round().clamp(0, 255).toInt());
@@ -127,18 +120,6 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
         setState(() => _image = img);
       },
     );
-  }
-
-  Color _colorFor(double t) {
-    if (t <= 0) return _colors.first;
-    if (t >= 1) return _colors.last;
-    for (var i = 0; i < _stops.length - 1; i++) {
-      if (t >= _stops[i] && t <= _stops[i + 1]) {
-        final f = (t - _stops[i]) / (_stops[i + 1] - _stops[i]);
-        return Color.lerp(_colors[i], _colors[i + 1], f)!;
-      }
-    }
-    return _colors.last;
   }
 
   @override
@@ -210,7 +191,7 @@ class _FieldMapWidgetState extends State<FieldMapWidget> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
                   gradient: const LinearGradient(
-                    colors: _colors,
+                    colors: HeatPalette.colors,
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   ),

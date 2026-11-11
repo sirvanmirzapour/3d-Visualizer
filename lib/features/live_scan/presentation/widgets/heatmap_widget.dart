@@ -8,12 +8,14 @@ class HeatmapWidget extends StatelessWidget {
   final int rows;
   final int columns;
   final List<num>? values;
+  final bool showValues;
 
   const HeatmapWidget({
     super.key,
     required this.rows,
     required this.columns,
     this.values,
+    this.showValues = true,
   });
 
   @override
@@ -33,7 +35,12 @@ class HeatmapWidget extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: CustomPaint(
-              painter: HeatmapGridPainter(rows: rows, columns: columns, values: values),
+              painter: HeatmapGridPainter(
+                rows: rows,
+                columns: columns,
+                values: values,
+                showValues: showValues,
+              ),
               child: const SizedBox.expand(),
             ),
           ),
