@@ -79,12 +79,22 @@ class DashboardPage extends ConsumerWidget {
         ? Icons.bluetooth_connected
         : Icons.link_off;
     return AppCard(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          AppColors.success.withValues(alpha: 0.22),
+          AppColors.primary.withValues(alpha: 0.12),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.55, 1.0],
+      ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.14),
+              color: AppColors.primary.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(Icons.radar, color: AppColors.primary, size: 28),
@@ -98,7 +108,7 @@ class DashboardPage extends ConsumerWidget {
                 const SizedBox(height: 4),
                 Text(
                   Strings.tr(locale, 'subtitle'),
-                  style: AppTextStyles.caption,
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -145,31 +155,62 @@ class DashboardPage extends ConsumerWidget {
         : Strings.tr(locale, 'noDeviceSelected');
     final connLabel = _connLabel(conn.status, locale);
     final connColor = _connColor(conn.status);
-    final lastVal = conn.measurements.isEmpty ? '—' : conn.measurements.last.toString();
 
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionHeader(
-            title: Strings.tr(locale, 'deviceStatus'),
-            subtitle: Strings.tr(locale, 'deviceStatusSub'),
-            trailing: StatusPill(label: connLabel, color: connColor),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: connColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  conn.status == BluetoothServiceStatus.connected
+                      ? Icons.bluetooth_connected
+                      : Icons.bluetooth_disabled,
+                  color: connColor,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      deviceName,
+                      style: AppTextStyles.bodyStrong,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      conn.deviceAddress ?? _btStatus(state, readiness, locale),
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              StatusPill(label: connLabel, color: connColor),
+            ],
           ),
-          const SizedBox(height: 14),
-          _infoRow(Strings.tr(locale, 'bluetoothStatus'), _btStatus(state, readiness, locale)),
-          _infoRow(Strings.tr(locale, 'deviceName'), deviceName),
-          if (conn.status == BluetoothServiceStatus.connected)
-            _infoRow(Strings.tr(locale, 'macAddress'), conn.deviceAddress ?? '—'),
-          _infoRow(Strings.tr(locale, 'connectionStatus'), connLabel),
-          _infoRow(Strings.tr(locale, 'lastMeasurement'), lastVal),
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
+          SizedBox(
+            width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => Navigator.pushNamed(context, AppRoutes.bluetooth),
-              icon: const Icon(Icons.bluetooth_searching),
+              icon: const Icon(Icons.bluetooth_searching, size: 18),
               label: Text(Strings.tr(locale, 'manageConnection')),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ],
@@ -220,25 +261,6 @@ class DashboardPage extends ConsumerWidget {
     return 'On (setup needed)';
   }
 
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: AppTextStyles.caption)),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildStartScanCard(BuildContext context, AppLocale locale) {
     return InkWell(
       onTap: () => Navigator.pushNamed(context, AppRoutes.scanConfig),
@@ -246,15 +268,17 @@ class DashboardPage extends ConsumerWidget {
       child: Ink(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              AppColors.primary.withValues(alpha: 0.22),
-              AppColors.secondary.withValues(alpha: 0.18),
-            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
+            colors: [
+              AppColors.success.withValues(alpha: 0.22),
+              AppColors.primary.withValues(alpha: 0.12),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.55, 1.0],
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(18),

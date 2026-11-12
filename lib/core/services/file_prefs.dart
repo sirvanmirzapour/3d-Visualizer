@@ -12,9 +12,21 @@ class FilePrefs {
 
   static String get _dir {
     if (Platform.isAndroid) {
+      // Prefer the real app files dir when available (path_provider), so we
+      // don't rely on a hardcoded /data/user/0 path that can differ on some
+      // devices or work profiles.
+      final override = _overrideDir;
+      if (override != null) return override;
       return '/data/user/0/$package/files';
     }
     return Directory.systemTemp.path;
+  }
+
+  /// Set by the app at startup via [init] (path_provider) when available.
+  static String? _overrideDir;
+
+  static Future<void> init(String? dir) async {
+    if (dir != null && dir.isNotEmpty) _overrideDir = dir;
   }
 
   static Future<String?> read(String key) async {
@@ -33,6 +45,23 @@ class FilePrefs {
       await dir.create(recursive: true);
       await File('$_dir/$key').writeAsString(value);
     } catch (_) {}
+  }
+
+  /// Atomic write: writes to `<key>.tmp` then renames over `<key>`.
+  /// A crash mid-write leaves the previous file intact instead of corrupting it.
+  static Future<void> writeAtomic(String key, String value) async {
+    try {
+      final dir = Directory(_dir);
+      await dir.create(recursive: true);
+      final tmp = File('$_dir/$key.tmp');
+      await tmp.writeAsString(value, flush: true);
+      final target = File('$_dir/$key');
+      if (await target.exists()) await target.delete();
+      await tmp.rename('$_dir/$key');
+    } catch (_) {
+      // Fallback to a plain write rather than losing the value entirely.
+      await write(key, value);
+    }
   }
 
   static Future<void> remove(String key) async {

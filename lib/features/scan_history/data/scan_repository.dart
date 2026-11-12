@@ -79,10 +79,9 @@ class ScanRepository {
   }
 
   Future<void> _persist() async {
-    await FilePrefs.write(
-      _file,
-      jsonEncode(_memory.map((e) => e.toJson()).toList()),
-    );
+    // Atomic write: write to a temp file first, then rename over the real one.
+    // If the app crashes mid-write, the previous scans.json stays intact.
+    await FilePrefs.writeAtomic(_file, jsonEncode(_memory.map((e) => e.toJson()).toList()));
   }
 }
 

@@ -1,5 +1,8 @@
 allprojects {
     repositories {
+        // Mirrors first (network-restricted environment); fall back to originals.
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
         google()
         mavenCentral()
     }

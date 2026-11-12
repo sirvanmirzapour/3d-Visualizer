@@ -1,5 +1,7 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/l10n/strings.dart';
@@ -77,11 +79,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     leading: const Icon(Icons.info_outline, color: AppColors.primary),
                     title: Text(Strings.tr(locale, 'about'), style: AppTextStyles.body),
                     subtitle: Text(Strings.tr(locale, 'aboutSub'), style: AppTextStyles.caption),
-                    onTap: () => showAboutDialog(
-                      context: context,
-                      applicationName: Strings.tr(locale, 'appName'),
-                      applicationVersion: '1.0.0',
-                    ),
+                    onTap: () => _showAboutDialog(context, locale),
                   ),
                 ],
               ),
@@ -164,6 +162,149 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAboutDialog(BuildContext context, AppLocale locale) {
+    final isFa = locale == AppLocale.fa;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.radar, color: AppColors.primary, size: 26),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        Strings.tr(locale, 'appName'),
+                        style: AppTextStyles.title.copyWith(fontSize: 18),
+                      ),
+                      Text(
+                        isFa ? 'اسکنر میدان مغناطیسی • نسخه 1.0.0' : 'Magnetic Field Scanner • v1.0.0',
+                        style: AppTextStyles.caption,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isFa ? 'تماس با من' : 'Contact',
+              style: AppTextStyles.overline.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            _contactTile(
+              context,
+              icon: Icons.telegram,
+              label: 'Telegram',
+              value: '@sirvanmi',
+              url: 'https://t.me/sirvanmi',
+              isFa: isFa,
+            ),
+            const SizedBox(height: 8),
+            _contactTile(
+              context,
+              icon: Icons.language,
+              label: 'Website',
+              value: 'sirvanmi.ir',
+              url: 'https://sirvanmi.ir',
+              isFa: isFa,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(isFa ? 'بستن' : 'Close'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _contactTile(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required String url,
+    required bool isFa,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () async {
+        final uri = Uri.parse(url);
+        try {
+          final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (!ok && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(isFa ? 'باز کردن ناموفق بود' : 'Could not open link')),
+            );
+          }
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(isFa ? 'برنامه‌ای برای باز کردن یافت نشد' : 'No app found to open this')),
+            );
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.primary, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                  Text(value, style: AppTextStyles.bodyStrong),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: isFa ? 'کپی' : 'Copy',
+              icon: const Icon(Icons.copy_rounded, size: 18),
+              color: AppColors.textSecondary,
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: value));
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    SnackBar(content: Text(isFa ? 'کپی شد' : 'Copied'), duration: const Duration(seconds: 1)),
+                  );
+              },
+            ),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textSecondary),
           ],
         ),
       ),
