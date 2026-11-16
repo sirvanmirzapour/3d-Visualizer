@@ -109,6 +109,17 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
 
   String _lineBuffer = '';
 
+  /// Minimum gap between accepted readings. The hardware streams faster than
+  /// the user can move the device, so anything arriving sooner is dropped.
+  static const Duration minReadingInterval = Duration(seconds: 1);
+
+  /// After connecting, the hardware sends a burst of buffered readings.
+  /// Data received within this window is discarded as startup noise.
+  static const Duration startupBurstWindow = Duration(seconds: 2);
+
+  DateTime? _lastAcceptedAt;
+  DateTime? _connectedAtForFilter;
+
   BluetoothConnectionService get _service => ref.read(bluetoothConnectionServiceProvider);
 
   void startListening() {
@@ -155,6 +166,18 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
               snapshot.deviceName,
             );
       }
+      if (snapshot.status == BluetoothServiceStatus.connected) {
+        // Arm the startup-burst filter only on the transition INTO connected,
+        // not on every snapshot (snapshots also fire while data flows).
+        if (_connectedAtForFilter == null) {
+          _connectedAtForFilter = DateTime.now();
+          _lastAcceptedAt = null;
+          _lineBuffer = '';
+        }
+      } else if (snapshot.status == BluetoothServiceStatus.disconnected) {
+        _connectedAtForFilter = null;
+        _lastAcceptedAt = null;
+      }
     }
   }
 
@@ -162,8 +185,26 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
     if (_disposed) return;
     if (state.status != BluetoothServiceStatus.connected) return;
 
+    final now = DateTime.now();
+
+    // Startup burst: the hardware dumps buffered readings right after the
+    // connection opens; drop everything in that window.
+    final connectedAt = _connectedAtForFilter;
+    if (connectedAt != null &&
+        now.difference(connectedAt) < startupBurstWindow) {
+      return;
+    }
+
+    // Rate limit: at least minReadingInterval between accepted readings.
+    final lastAccepted = _lastAcceptedAt;
+    if (lastAccepted != null &&
+        now.difference(lastAccepted) < minReadingInterval) {
+      return;
+    }
+
     final measurements = <num>[...state.measurements];
     _lineBuffer += utf8.decode(data, allowMalformed: true);
+    var acceptedAny = false;
     while (true) {
       final br = _indexOfLineBreak(_lineBuffer);
       if (br < 0) break;
@@ -173,10 +214,10 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
       final value = num.tryParse(raw);
       if (value != null && measurements.length < maxMeasurements) {
         measurements.add(value);
+        acceptedAny = true;
       }
     }
 
-    final now = DateTime.now();
     final event = RawDataEvent(
       data: data,
       receivedAt: now,
@@ -186,6 +227,9 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
     final events = [...state.recentEvents, event];
     if (events.length > maxRecentEvents) {
       events.removeRange(0, events.length - maxRecentEvents);
+    }
+    if (acceptedAny) {
+      _lastAcceptedAt = now;
     }
     _updateState(
       lastDataReceivedAt: now,
@@ -199,6 +243,8 @@ class BluetoothConnectionController extends StateNotifier<BluetoothConnectionSta
 
   void clearMeasurements() {
     if (_disposed) return;
+    _lineBuffer = '';
+    _lastAcceptedAt = null;
     _updateState(measurements: const []);
   }
 

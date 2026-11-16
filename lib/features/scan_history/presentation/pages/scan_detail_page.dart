@@ -37,6 +37,18 @@ class ScanDetailPage extends ConsumerStatefulWidget {
 
 class _ScanDetailPageState extends ConsumerState<ScanDetailPage> {
   _DetailView _view = _DetailView.twoD;
+  bool _showValues = false;
+  double _adjustment = 0;
+  bool _applied = false;
+
+  List<num> get _displayMeasurements {
+    final base = widget.measurements!;
+    if (_adjustment == 0) return base;
+    final avg = base.fold<num>(0, (s, v) => s + v) / base.length;
+    return base
+        .map((v) => v > avg ? v + _adjustment : (v < avg ? v - _adjustment : v))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +112,60 @@ class _ScanDetailPageState extends ConsumerState<ScanDetailPage> {
                 ],
               ),
               const SizedBox(height: 8),
+              if (hasData && _view == _DetailView.twoD)
+                Row(
+                  children: [
+                    const Icon(Icons.numbers, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        Strings.tr(locale, 'showValues'),
+                        style: AppTextStyles.body,
+                      ),
+                    ),
+                    Switch(
+                      value: _showValues,
+                      onChanged: (v) => setState(() => _showValues = v),
+                    ),
+                  ],
+                ),
+              if (hasData && _view == _DetailView.twoD) const SizedBox(height: 8),
+              if (hasData && _view == _DetailView.twoD)
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SectionHeader(
+                        title: Strings.tr(locale, 'adjustValues'),
+                        subtitle: Strings.tr(locale, 'adjustValuesSub'),
+                      ),
+                      const SizedBox(height: 12),
+                      SegmentedButton<double>(
+                        segments: const [
+                          ButtonSegment(value: 0, label: Text('0')),
+                          ButtonSegment(value: 5, label: Text('5')),
+                          ButtonSegment(value: 10, label: Text('10')),
+                          ButtonSegment(value: 15, label: Text('15')),
+                        ],
+                        selected: {_adjustment},
+                        onSelectionChanged: (s) => setState(() {
+                          _adjustment = s.first;
+                          _applied = s.first != 0;
+                        }),
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                      ),
+                      if (_applied) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          Strings.tr(locale, 'adjustedNote'),
+                          style: AppTextStyles.caption,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              if (hasData && _view == _DetailView.twoD) const SizedBox(height: 8),
               AppCard(
                 child: hasData
                     ? _buildMap()
@@ -117,7 +183,7 @@ class _ScanDetailPageState extends ConsumerState<ScanDetailPage> {
   }
 
   Widget _buildMap() {
-    final measurements = widget.measurements!;
+    final measurements = _displayMeasurements;
     if (_view == _DetailView.threeD) {
       return Field3DWidget(
         rows: widget.rows,
@@ -129,6 +195,7 @@ class _ScanDetailPageState extends ConsumerState<ScanDetailPage> {
       rows: widget.rows,
       columns: widget.columns,
       measurements: measurements,
+      showValues: _showValues,
     );
   }
 

@@ -31,6 +31,7 @@ class _ScanConfigurationPageState extends ConsumerState<ScanConfigurationPage> {
 
   int _rows = AppConstants.defaultRows;
   int _cols = AppConstants.defaultColumns;
+  bool _zigzag = false;
 
   @override
   void initState() {
@@ -81,7 +82,7 @@ class _ScanConfigurationPageState extends ConsumerState<ScanConfigurationPage> {
     Navigator.pushNamed(
       context,
       AppRoutes.liveScan,
-      arguments: {'rows': rows, 'columns': cols},
+      arguments: {'rows': rows, 'columns': cols, 'zigzag': _zigzag},
     );
   }
 
@@ -148,6 +149,44 @@ class _ScanConfigurationPageState extends ConsumerState<ScanConfigurationPage> {
                       Text(
                         Strings.tr(locale, 'nonPositiveHint'),
                         style: AppTextStyles.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SectionHeader(
+                  title: Strings.tr(locale, 'movementPattern'),
+                  subtitle: Strings.tr(locale, 'movementPatternSub'),
+                ),
+                const SizedBox(height: 10),
+                AppCard(
+                  child: Column(
+                    children: [
+                      SegmentedButton<bool>(
+                        segments: [
+                          ButtonSegment(
+                            value: false,
+                            icon: const Icon(Icons.swap_vert),
+                            label: Text(Strings.tr(locale, 'patternStraight')),
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            icon: const Icon(Icons.shuffle),
+                            label: Text(Strings.tr(locale, 'patternZigzag')),
+                          ),
+                        ],
+                        selected: {_zigzag},
+                        onSelectionChanged: (s) => setState(() => _zigzag = s.first),
+                        showSelectedIcon: false,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 120,
+                        child: _PatternPreview(
+                          rows: showPreview ? validRows : 1,
+                          columns: showPreview ? validCols : 1,
+                          zigzag: _zigzag,
+                        ),
                       ),
                     ],
                   ),
@@ -242,6 +281,80 @@ class _GridPreview extends StatelessWidget {
         ],
       ],
     );
+  }
+}
+
+class _PatternPreview extends StatelessWidget {
+  final int rows;
+  final int columns;
+  final bool zigzag;
+
+  const _PatternPreview({required this.rows, required this.columns, required this.zigzag});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.infinite,
+      painter: _PatternPainter(rows: rows, columns: columns, zigzag: zigzag),
+    );
+  }
+}
+
+class _PatternPainter extends CustomPainter {
+  final int rows;
+  final int columns;
+  final bool zigzag;
+
+  _PatternPainter({required this.rows, required this.columns, required this.zigzag});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const r = 4;
+    const c = 5;
+    final cellW = size.width / c;
+    final cellH = size.height / r;
+    final grid = Paint()
+      ..color = const Color(0xFF334155)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (int i = 0; i <= r; i++) {
+      canvas.drawLine(Offset(0, i * cellH), Offset(size.width, i * cellH), grid);
+    }
+    for (int i = 0; i <= c; i++) {
+      canvas.drawLine(Offset(i * cellW, 0), Offset(i * cellW, size.height), grid);
+    }
+
+    final path = Paint()
+      ..color = AppColors.primary
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    final dot = Paint()..color = AppColors.primary;
+
+    // Build the visit order for a 4x5 demo grid: straight = always left->right,
+    // zigzag = alternate direction per row.
+    final points = <Offset>[];
+    for (int row = 0; row < r; row++) {
+      for (int col = 0; col < c; col++) {
+        final cc = zigzag && row.isOdd ? c - 1 - col : col;
+        points.add(Offset((cc + 0.5) * cellW, (row + 0.5) * cellH));
+      }
+    }
+    for (int i = 0; i < points.length - 1; i++) {
+      canvas.drawLine(points[i], points[i + 1], path);
+    }
+    for (final p in points) {
+      canvas.drawCircle(p, 3, dot);
+    }
+    // Start marker.
+    canvas.drawCircle(points.first, 6, Paint()..color = AppColors.success);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PatternPainter oldDelegate) {
+    return oldDelegate.rows != rows ||
+        oldDelegate.columns != columns ||
+        oldDelegate.zigzag != zigzag;
   }
 }
 

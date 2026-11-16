@@ -2,7 +2,7 @@ enum AppLocale { en, fa }
 
 class Strings {
   static const Map<String, String> en = {
-    'appName': 'Visualizer 3D',
+    'appName': 'GoldenMask',
     'settings': 'Settings',
     'dashboard': 'Dashboard',
     'subtitle': 'Scientific magnetic field scanning workspace',
@@ -154,10 +154,22 @@ class Strings {
     'nothingToSave': 'Nothing to save yet.',
     'fieldMapPlaceholder': 'Start receiving at least 2 points\nto render the field map',
     'gridNotation': 'Grid: {rows} × {columns} ({points} points)',
+    'showValues': 'Show values on heatmap',
+    'movementPattern': 'Movement Pattern',
+    'movementPatternSub': 'How you move the hardware device over the area',
+    'patternStraight': 'Straight',
+    'patternZigzag': 'Zigzag',
+    'pattern': 'Pattern',
+    'adjustValues': 'Adjust Values',
+    'adjustValuesSub': 'Adds the selected amount to points above the average and subtracts it from points below',
+    'noAdjustment': 'None',
+    'adjustedNote': 'Adjustment applied: points above the average increased, below decreased',
+    'stopLiveScan': 'Stop',
+    'scanStopped': 'Scan stopped',
   };
 
   static const Map<String, String> fa = {
-    'appName': 'ویژوالایزر سه‌بعدی',
+    'appName': 'GoldenMask',
     'settings': 'تنظیمات',
     'dashboard': 'داشبورد',
     'subtitle': 'محیط کاری اسکن میدان مغناطیسی',
@@ -309,6 +321,18 @@ class Strings {
     'nothingToSave': 'هنوز داده‌ای برای ذخیره نیست.',
     'fieldMapPlaceholder': 'برای رندر نقشه میدان، حداقل ۲ نقطه دریافت کنید',
     'gridNotation': 'شبکه: {rows} × {columns} ({points} نقطه)',
+    'showValues': 'نمایش اعداد روی نقشه حرارتی',
+    'movementPattern': 'الگوی حرکت',
+    'movementPatternSub': 'نحوه حرکت شما با دستگاه سخت‌افزاری روی محوطه',
+    'patternStraight': 'مستقیم',
+    'patternZigzag': 'زیگزاگی',
+    'pattern': 'الگو',
+    'adjustValues': 'تنظیم مقادیر',
+    'adjustValuesSub': 'مقدار انتخاب‌شده به نقاط بالاتر از میانگین اضافه و از نقاط پایین‌تر کم می‌شود',
+    'noAdjustment': 'بدون تغییر',
+    'adjustedNote': 'تنظیم اعمال شد: نقاط بالای میانگین زیاد و نقاط پایین‌تر کم شدند',
+    'stopLiveScan': 'توقف',
+    'scanStopped': 'اسکن متوقف شد',
   };
 
   static String tr(AppLocale locale, String key, [Map<String, String>? args]) {

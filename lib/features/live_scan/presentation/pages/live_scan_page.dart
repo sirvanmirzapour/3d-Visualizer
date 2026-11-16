@@ -20,17 +20,20 @@ enum HeatmapMode { smooth, square }
 class LiveScanPage extends ConsumerStatefulWidget {
   final int rows;
   final int columns;
+  final bool zigzag;
   final bool embedded;
 
   const LiveScanPage({
     super.key,
     required this.rows,
     required this.columns,
+    this.zigzag = false,
   }) : embedded = false;
 
   const LiveScanPage.embedded({super.key})
       : rows = AppConstants.defaultRows,
         columns = AppConstants.defaultColumns,
+        zigzag = false,
         embedded = true;
 
   @override
@@ -121,7 +124,7 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
               children: [
                 const Icon(Icons.numbers, size: 20),
                 const SizedBox(width: 8),
-                const Expanded(child: Text('Show values', style: AppTextStyles.body)),
+                Expanded(child: Text(Strings.tr(locale, 'showValues'), style: AppTextStyles.body)),
                 Switch(
                   value: _showValues,
                   onChanged: (v) => setState(() => _showValues = v),
@@ -162,7 +165,7 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
             const SizedBox(height: 12),
             _infoSection(total, received, remaining, progress, locale),
             const SizedBox(height: 12),
-            _controls(context, locale),
+            _controls(context, locale, status: conn.status),
           ],
         ),
       ),
@@ -283,11 +286,6 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            Strings.tr(locale, 'gridNotation', {'rows': '$widget.rows', 'columns': '$widget.columns', 'points': '$total'}),
-            style: AppTextStyles.body,
-          ),
-          const SizedBox(height: 4),
-          Text(
             status == BluetoothServiceStatus.connected
                 ? '${Strings.tr(locale, 'receivingFrom')} ${deviceName ?? 'device'}'
                 : Strings.tr(locale, 'connectDeviceHint'),
@@ -361,7 +359,11 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
     );
   }
 
-  Widget _controls(BuildContext context, AppLocale locale) {
+  Widget _controls(
+    BuildContext context,
+    AppLocale locale, {
+    required BluetoothServiceStatus status,
+  }) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,6 +380,23 @@ class _LiveScanPageState extends ConsumerState<LiveScanPage> {
                 },
                 icon: const Icon(Icons.refresh),
                 label: Text(Strings.tr(locale, 'resetData')),
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.error),
+                ),
+                onPressed: status == BluetoothServiceStatus.connected ||
+                        status == BluetoothServiceStatus.connecting
+                    ? () async {
+                        await ref.read(bluetoothConnectionProvider.notifier).disconnect();
+                        if (context.mounted) {
+                          _showMsg(Strings.tr(locale, 'scanStopped'));
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.stop_circle_outlined),
+                label: Text(Strings.tr(locale, 'stopLiveScan')),
               ),
               ElevatedButton.icon(
                 onPressed: _save,

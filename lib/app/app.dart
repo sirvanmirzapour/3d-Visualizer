@@ -41,6 +41,7 @@ class AppRouter {
           builder: (_) => LiveScanPage(
             rows: (args['rows'] as int?) ?? 10,
             columns: (args['columns'] as int?) ?? 10,
+            zigzag: (args['zigzag'] as bool?) ?? false,
           ),
         );
       case AppRoutes.scanDetail:
