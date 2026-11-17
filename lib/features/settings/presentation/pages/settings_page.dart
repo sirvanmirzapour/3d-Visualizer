@@ -1,7 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/l10n/strings.dart';
@@ -62,15 +60,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   _dropdownTile(
                     icon: Icons.language,
                     label: Strings.tr(locale, 'language'),
-                    value: Strings.tr(locale, 'persian'),
+                    value: _localeLabel(locale, settings.locale),
                     items: [
-                      Strings.tr(locale, 'english'),
-                      Strings.tr(locale, 'persian'),
+                      _localeLabel(locale, AppLocale.en),
+                      _localeLabel(locale, AppLocale.fa),
+                      _localeLabel(locale, AppLocale.ku),
+                      _localeLabel(locale, AppLocale.ar),
+                      _localeLabel(locale, AppLocale.de),
                     ],
                     onChanged: (v) {
-                      controller.setLocale(
-                        v == Strings.tr(locale, 'persian') ? AppLocale.fa : AppLocale.en,
+                      final selected = _localeItems(locale).firstWhere(
+                        (e) => e.$2 == v,
+                        orElse: () => (AppLocale.en, ''),
                       );
+                      controller.setLocale(selected.$1);
                     },
                   ),
                   const Divider(height: 20),
@@ -168,8 +171,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  static const _localeKeys = <AppLocale, String>{
+    AppLocale.en: 'english',
+    AppLocale.fa: 'persian',
+    AppLocale.ku: 'kurdish',
+    AppLocale.ar: 'arabic',
+    AppLocale.de: 'german',
+  };
+
+  String _localeLabel(AppLocale uiLocale, AppLocale l) =>
+      Strings.tr(uiLocale, _localeKeys[l]!);
+
+  List<(AppLocale, String)> _localeItems(AppLocale uiLocale) => _localeKeys.entries
+      .map((e) => (e.key, Strings.tr(uiLocale, e.value)))
+      .toList();
+
   void _showAboutDialog(BuildContext context, AppLocale locale) {
-    final isFa = locale == AppLocale.fa;
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -199,7 +216,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         style: AppTextStyles.title.copyWith(fontSize: 18),
                       ),
                       Text(
-                        isFa ? 'اسکنر میدان مغناطیسی • نسخه 1.0.0' : 'Magnetic Field Scanner • v1.0.0',
+                        Strings.tr(locale, 'aboutSub'),
                         style: AppTextStyles.caption,
                       ),
                     ],
@@ -209,33 +226,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              isFa ? 'تماس با من' : 'Contact',
+              Strings.tr(locale, 'aboutMadeIn'),
+              style: AppTextStyles.body,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              Strings.tr(locale, 'aboutContact'),
               style: AppTextStyles.overline.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 8),
-            _contactTile(
-              context,
-              icon: Icons.telegram,
-              label: 'Telegram',
-              value: '@sirvanmi',
-              url: 'https://t.me/sirvanmi',
-              isFa: isFa,
-            ),
-            const SizedBox(height: 8),
-            _contactTile(
-              context,
-              icon: Icons.language,
-              label: 'Website',
-              value: 'sirvanmi.ir',
-              url: 'https://sirvanmi.ir',
-              isFa: isFa,
-            ),
-            const SizedBox(height: 8),
+            Text(Strings.tr(locale, 'aboutLocation'), style: AppTextStyles.caption),
+            const SizedBox(height: 4),
+            Text(Strings.tr(locale, 'aboutPhone'), style: AppTextStyles.caption),
+            const SizedBox(height: 4),
+            Text(Strings.tr(locale, 'aboutCountry'), style: AppTextStyles.caption),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text(isFa ? 'بستن' : 'Close'),
+                child: Text(Strings.tr(locale, 'none') == 'None' ? 'Close' : 'بستن'),
               ),
             ),
           ],
@@ -244,72 +254,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  Widget _contactTile(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String value,
-    required String url,
-    required bool isFa,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () async {
-        final uri = Uri.parse(url);
-        try {
-          final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-          if (!ok && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(isFa ? 'باز کردن ناموفق بود' : 'Could not open link')),
-            );
-          }
-        } catch (_) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(isFa ? 'برنامه‌ای برای باز کردن یافت نشد' : 'No app found to open this')),
-            );
-          }
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.cardBorder),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.primary, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
-                  Text(value, style: AppTextStyles.bodyStrong),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: isFa ? 'کپی' : 'Copy',
-              icon: const Icon(Icons.copy_rounded, size: 18),
-              color: AppColors.textSecondary,
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: value));
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(
-                    SnackBar(content: Text(isFa ? 'کپی شد' : 'Copied'), duration: const Duration(seconds: 1)),
-                  );
-              },
-            ),
-            const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textSecondary),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _dropdownTile({
     required IconData icon,

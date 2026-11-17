@@ -49,7 +49,7 @@ class SettingsController extends StateNotifier<SettingsState> {
     final addr = await FilePrefs.read('lastDeviceAddress');
     final name = await FilePrefs.read('lastDeviceName');
     state = SettingsState(
-      locale: locale == 'fa' ? AppLocale.fa : AppLocale.en,
+      locale: _localeFromCode(locale),
       themeMode: theme == 'light' ? AppThemeMode.light : AppThemeMode.dark,
       autoConnect: auto == 'true',
       lastDeviceAddress: addr,
@@ -57,9 +57,39 @@ class SettingsController extends StateNotifier<SettingsState> {
     );
   }
 
+  static AppLocale _localeFromCode(String code) {
+    switch (code) {
+      case 'fa':
+        return AppLocale.fa;
+      case 'ku':
+        return AppLocale.ku;
+      case 'ar':
+        return AppLocale.ar;
+      case 'de':
+        return AppLocale.de;
+      default:
+        return AppLocale.en;
+    }
+  }
+
+  static String _localeCode(AppLocale locale) {
+    switch (locale) {
+      case AppLocale.fa:
+        return 'fa';
+      case AppLocale.ku:
+        return 'ku';
+      case AppLocale.ar:
+        return 'ar';
+      case AppLocale.de:
+        return 'de';
+      case AppLocale.en:
+        return 'en';
+    }
+  }
+
   Future<void> setLocale(AppLocale locale) async {
     state = state.copyWith(locale: locale);
-    await FilePrefs.write('locale', locale == AppLocale.fa ? 'fa' : 'en');
+    await FilePrefs.write('locale', _localeCode(locale));
   }
 
   Future<void> setThemeMode(AppThemeMode mode) async {
